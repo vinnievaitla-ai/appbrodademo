@@ -5,14 +5,15 @@ import * as path from 'path'
 const TMP_DIR = path.join(process.cwd(), 'tmp')
 
 export function renderComposition(htmlContent: string, jobId: string): string {
-  fs.mkdirSync(TMP_DIR, { recursive: true })
-
-  const htmlPath = path.join(TMP_DIR, `${jobId}.html`)
+  // HyperFrames render expects a project directory, not a bare HTML file.
+  // Write index.html into a per-job directory and pass the directory path.
+  const jobDir = path.join(TMP_DIR, jobId)
   const outputPath = path.join(TMP_DIR, `${jobId}.mp4`)
 
-  fs.writeFileSync(htmlPath, htmlContent, 'utf-8')
+  fs.mkdirSync(jobDir, { recursive: true })
+  fs.writeFileSync(path.join(jobDir, 'index.html'), htmlContent, 'utf-8')
 
-  execSync(`npx hyperframes render ${htmlPath} -o ${outputPath}`, {
+  execSync(`npx hyperframes render ${jobDir} -o ${outputPath}`, {
     timeout: 300_000,
     stdio: 'pipe',
   })
@@ -21,9 +22,6 @@ export function renderComposition(htmlContent: string, jobId: string): string {
 }
 
 export function cleanupTmp(jobId: string) {
-  for (const ext of ['html', 'mp4']) {
-    try {
-      fs.unlinkSync(path.join(TMP_DIR, `${jobId}.${ext}`))
-    } catch {}
-  }
+  try { fs.rmSync(path.join(TMP_DIR, jobId), { recursive: true, force: true }) } catch {}
+  try { fs.unlinkSync(path.join(TMP_DIR, `${jobId}.mp4`)) } catch {}
 }
