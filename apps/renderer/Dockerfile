@@ -11,10 +11,10 @@ RUN npm run build
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM node:22-slim AS runner
 
-# Install FFmpeg and Chrome dependencies
+# System dependencies for chrome-headless-shell + FFmpeg
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    chromium \
+    ca-certificates \
     fonts-liberation \
     libglib2.0-0 \
     libnss3 \
@@ -33,9 +33,15 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# Tell Puppeteer to use the system Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Download chrome-headless-shell — required by HyperFrames for the BeginFrame API
+# that enables frame-precise video rendering. Regular chromium does not have this API.
+RUN npx --yes @puppeteer/browsers install chrome-headless-shell@stable --path /opt/chrome \
+    && CHROME_BIN=$(find /opt/chrome -name 'chrome-headless-shell' -type f | head -1) \
+    && chmod +x "$CHROME_BIN" \
+    && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell \
+    && echo "chrome-headless-shell installed at: $CHROME_BIN"
+
+ENV PRODUCER_HEADLESS_SHELL_PATH=/usr/local/bin/chrome-headless-shell
 
 WORKDIR /app
 COPY apps/renderer/package*.json ./
