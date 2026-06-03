@@ -22,6 +22,14 @@ COMPOSITION RULES:
 7. Do NOT reference external files (no src= for video/img unless given a URL)
 8. Background fills and text overlays only — no external media dependencies
 
+FONTS — CRITICAL:
+- The renderer runs in a Linux Docker container with limited fonts. DO NOT use Georgia, Times New Roman, Palatino, Garamond, or any serif font by name.
+- For custom fonts, ALWAYS load via Google Fonts @import at the very top of your <style> block:
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&display=swap');
+- Use the imported font-family name in your CSS (e.g. font-family: 'Playfair Display', serif).
+- Safe fallbacks: Arial, Helvetica, sans-serif, monospace — these are always available.
+- Always pick at least one Google Font import so custom font families resolve correctly.
+
 OUTPUT: Return ONLY the complete HTML file content. No markdown, no explanation, no code fences.`
 
 export async function GET(request: NextRequest) {
