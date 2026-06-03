@@ -30,6 +30,10 @@ create table if not exists render_jobs (
   completed_at    timestamptz
 );
 
+-- ── RLS — disabled (no auth, demo project) ───────────────────────────────────
+alter table templates disable row level security;
+alter table render_jobs disable row level security;
+
 -- ── indexes ───────────────────────────────────────────────────────────────────
 create index if not exists templates_category_idx on templates(category, created_at desc);
 create index if not exists render_jobs_status_idx on render_jobs(status, created_at desc);
