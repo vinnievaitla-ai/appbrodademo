@@ -29,6 +29,7 @@ export function LibraryPage() {
   const [pendingJobIds, setPendingJobIds] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -90,6 +91,7 @@ export function LibraryPage() {
 
   const handleUpload = async (file: File) => {
     setIsUploading(true)
+    setUploadError('')
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -97,11 +99,12 @@ export function LibraryPage() {
       formData.append('name', file.name)
 
       const res = await fetch('/api/templates', { method: 'POST', body: formData })
-      if (!res.ok) throw new Error('Upload failed')
-      const { template } = await res.json()
-      setTemplates((prev) => [template, ...prev])
-    } catch (e) {
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Upload failed')
+      setTemplates((prev) => [json.template, ...prev])
+    } catch (e: any) {
       console.error(e)
+      setUploadError(e.message || 'Upload failed')
     } finally {
       setIsUploading(false)
     }
@@ -186,6 +189,14 @@ export function LibraryPage() {
             </button>
           </div>
         </div>
+
+        {/* Upload error banner */}
+        {uploadError && (
+          <div className="bg-red-50 border-b border-red-200 px-6 py-2 flex items-center justify-between">
+            <p className="text-sm text-red-600">{uploadError}</p>
+            <button onClick={() => setUploadError('')} className="text-red-400 hover:text-red-600 text-xs ml-4">✕</button>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
