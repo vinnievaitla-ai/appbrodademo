@@ -11,37 +11,16 @@ HyperFrames converts HTML files into MP4 videos by driving headless Chrome frame
 ════════════════════════════════════════
 MANDATORY: window.__hf SETUP SCRIPT
 ════════════════════════════════════════
-Every composition MUST include this exact <script> block immediately before </body>.
-Do NOT omit it. Do NOT modify the window.__hf assignment logic. It is what makes rendering work.
+Every composition MUST include this exact <script> block as the FIRST child of <head>.
+It must run synchronously — no DOMContentLoaded wrapper. Do NOT omit it.
 
 <script>
-(function () {
-  function setup() {
-    var anims = document.getAnimations();
-    var maxEnd = 0;
-    anims.forEach(function (a) {
-      var t = a.effect && a.effect.getTiming ? a.effect.getTiming() : null;
-      if (!t) return;
-      var delay = typeof t.delay === 'number' ? t.delay : 0;
-      var dur = typeof t.duration === 'number' ? t.duration : 0;
-      var end = (delay + dur) / 1000;
-      if (end > maxEnd) maxEnd = end;
-    });
-    window.__hf = {
-      duration: maxEnd || 8,
-      seek: function (t) {
-        document.getAnimations().forEach(function (a) {
-          a.currentTime = t * 1000;
-        });
-      }
-    };
+window.__hf = {
+  duration: 8,
+  seek: function(t) {
+    document.getAnimations().forEach(function(a) { a.currentTime = t * 1000; });
   }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setup);
-  } else {
-    setup();
-  }
-})();
+};
 </script>
 
 ════════════════════════════════════════
