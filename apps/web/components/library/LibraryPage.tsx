@@ -120,13 +120,29 @@ export function LibraryPage() {
     setIsUploading(true)
     setUploadError('')
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('category', activeCategory)
-      formData.append('name', file.name)
-      const res = await fetch('/api/templates', { method: 'POST', body: formData })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Upload failed')
+      const ext = file.name.split('.').pop() || 'mp4'
+
+      // Step 1: get a signed upload URL from Supabase (via our API)
+      const urlRes = await fetch(`/api/templates/upload-url?ext=${ext}`)
+      if (!urlRes.ok) throw new Error('Could not get upload URL')
+      const { signedUrl, path } = await urlRes.json()
+
+      // Step 2: upload the file directly to Supabase — bypasses Vercel body limit
+      const putRes = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+
+      // Step 3: save metadata to DB via our API
+      const metaRes = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, category: activeCategory, path, fileSizeBytes: file.size }),
+      })
+      const json = await metaRes.json()
+      if (!metaRes.ok) throw new Error(json.error || 'Failed to save template')
       setTemplates(prev => [json.template, ...prev])
     } catch (e: any) {
       setUploadError(e.message || 'Upload failed')

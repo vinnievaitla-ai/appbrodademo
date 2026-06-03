@@ -15,42 +15,26 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ templates: data })
 }
 
+// Accepts JSON { name, category, path, fileSizeBytes } after browser has uploaded
+// directly to Supabase Storage via signed URL — no file bytes pass through Vercel.
 export async function POST(request: NextRequest) {
   const supabase = createServiceClient()
 
-  let formData: FormData
+  let body: { name: string; category: string; path: string; fileSizeBytes: number }
   try {
-    formData = await request.formData()
-  } catch (e: any) {
-    return NextResponse.json({ error: 'Failed to parse form data: ' + e.message }, { status: 400 })
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const file = formData.get('file') as File
-  const category = (formData.get('category') as string) || 'end_card'
-  const name = (formData.get('name') as string) || file?.name
+  const { name, category = 'end_card', path, fileSizeBytes } = body
+  if (!path) return NextResponse.json({ error: 'path is required' }, { status: 400 })
 
-  if (!file || file.size === 0) {
-    return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-  }
-
-  const ext = file.name.split('.').pop()
-  const fileName = `${crypto.randomUUID()}.${ext}`
-  const buffer = await file.arrayBuffer()
-
-  const { error: uploadError } = await supabase.storage
-    .from('templates')
-    .upload(fileName, buffer, { contentType: file.type, upsert: false })
-
-  if (uploadError) {
-    console.error('Storage upload error:', uploadError)
-    return NextResponse.json({ error: 'Storage error: ' + uploadError.message }, { status: 500 })
-  }
-
-  const { data: { publicUrl } } = supabase.storage.from('templates').getPublicUrl(fileName)
+  const { data: { publicUrl } } = supabase.storage.from('templates').getPublicUrl(path)
 
   const { data, error } = await supabase
     .from('templates')
-    .insert({ name, file_url: publicUrl, file_size_bytes: file.size, category })
+    .insert({ name: name || path, file_url: publicUrl, file_size_bytes: fileSizeBytes ?? 0, category })
     .select()
     .single()
 
