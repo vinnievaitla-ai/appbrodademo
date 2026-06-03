@@ -4,7 +4,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Sidebar } from './Sidebar'
 import { MediaCard } from './MediaCard'
 import { GenerateModal } from '../variants/GenerateModal'
-import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +21,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   end_card: 'End Card',
 }
 
+interface SelectedTemplate {
+  id: string
+  name: string
+  fileUrl: string
+}
+
 export function LibraryPage() {
   const [activeCategory, setActiveCategory] = useState('end_card')
   const [templates, setTemplates] = useState<Template[]>([])
@@ -31,6 +36,7 @@ export function LibraryPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<SelectedTemplate | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -80,9 +86,7 @@ export function LibraryPage() {
 
       if (resolved.length > 0) {
         setPendingJobIds((prev) => prev.filter((id) => !resolved.includes(id)))
-        if (newVariants.length > 0) {
-          setVariants((prev) => [...newVariants, ...prev])
-        }
+        if (newVariants.length > 0) setVariants((prev) => [...newVariants, ...prev])
       }
     }, 3000)
 
@@ -103,7 +107,6 @@ export function LibraryPage() {
       if (!res.ok) throw new Error(json.error || 'Upload failed')
       setTemplates((prev) => [json.template, ...prev])
     } catch (e: any) {
-      console.error(e)
       setUploadError(e.message || 'Upload failed')
     } finally {
       setIsUploading(false)
@@ -113,6 +116,15 @@ export function LibraryPage() {
   const handleDeleteTemplate = async (id: string) => {
     setTemplates((prev) => prev.filter((t) => t.id !== id))
     await fetch(`/api/templates/${id}`, { method: 'DELETE' }).catch(() => {})
+  }
+
+  const openGenerateModal = (templateId?: string, templateName?: string, templateUrl?: string) => {
+    if (templateId && templateName && templateUrl) {
+      setSelectedTemplate({ id: templateId, name: templateName, fileUrl: templateUrl })
+    } else {
+      setSelectedTemplate(null)
+    }
+    setShowGenerateModal(true)
   }
 
   const filteredTemplates = templates.filter((t) =>
@@ -148,13 +160,10 @@ export function LibraryPage() {
               )}
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-              >
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
                 Upload Template
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowGenerateModal(true)}>
+              <DropdownMenuItem onClick={() => openGenerateModal()}>
                 <Sparkles className="h-3.5 w-3.5 mr-2 text-blue-500" />
                 Generate Variant
               </DropdownMenuItem>
@@ -170,7 +179,6 @@ export function LibraryPage() {
 
           <div className="flex-1" />
 
-          {/* Search */}
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
             <input
@@ -192,7 +200,7 @@ export function LibraryPage() {
 
         {/* Upload error banner */}
         {uploadError && (
-          <div className="bg-red-50 border-b border-red-200 px-6 py-2 flex items-center justify-between">
+          <div className="bg-red-50 border-b border-red-200 px-6 py-2 flex items-center justify-between shrink-0">
             <p className="text-sm text-red-600">{uploadError}</p>
             <button onClick={() => setUploadError('')} className="text-red-400 hover:text-red-600 text-xs ml-4">✕</button>
           </div>
@@ -205,8 +213,9 @@ export function LibraryPage() {
               <Loader2 className="h-5 w-5 animate-spin text-gray-300" />
             </div>
           ) : (
-            <div className="space-y-8">
-              {/* Templates */}
+            <div className="space-y-10">
+
+              {/* Templates section */}
               <section>
                 <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">
                   Templates
@@ -214,10 +223,7 @@ export function LibraryPage() {
                 {filteredTemplates.length === 0 ? (
                   <p className="text-sm text-gray-400">
                     No templates yet.{' '}
-                    <button
-                      className="text-blue-600 underline"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
+                    <button className="text-blue-600 underline" onClick={() => fileInputRef.current?.click()}>
                       Upload one
                     </button>{' '}
                     to get started.
@@ -232,17 +238,18 @@ export function LibraryPage() {
                         fileUrl={t.file_url}
                         fileSizeBytes={t.file_size_bytes}
                         onDelete={handleDeleteTemplate}
+                        onGenerate={openGenerateModal}
                       />
                     ))}
                   </div>
                 )}
               </section>
 
-              {/* Generated Variants */}
+              {/* HF Generated Variants section */}
               <section>
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-3 mb-3">
                   <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-                    Generated Variants
+                    HF Generated Variants
                   </h2>
                   {pendingJobIds.length > 0 && (
                     <span className="flex items-center gap-1 text-xs text-blue-600 font-medium">
@@ -251,29 +258,32 @@ export function LibraryPage() {
                     </span>
                   )}
                 </div>
+
                 {filteredVariants.length === 0 && pendingJobIds.length === 0 ? (
                   <p className="text-sm text-gray-400">
-                    No variants yet.{' '}
-                    <button
-                      className="text-blue-600 underline"
-                      onClick={() => setShowGenerateModal(true)}
-                    >
-                      Generate one
-                    </button>{' '}
-                    using AI.
+                    No variants yet. Hover over a template and click{' '}
+                    <span className="font-medium text-gray-600">Generate Variant</span> to create one.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-4">
+                    {/* Rendering skeleton cards */}
                     {pendingJobIds.map((id) => (
                       <div
                         key={id}
-                        className="w-[196px] rounded-lg border border-blue-200 bg-blue-50 flex flex-col items-center justify-center gap-2 text-blue-600"
+                        className="w-[196px] rounded-lg border border-blue-200 bg-blue-50 flex flex-col items-center justify-center gap-2 text-blue-500"
                         style={{ height: 160 }}
                       >
-                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <div className="relative">
+                          <Sparkles className="h-5 w-5" />
+                          <div className="absolute inset-0 animate-ping opacity-40">
+                            <Sparkles className="h-5 w-5" />
+                          </div>
+                        </div>
                         <span className="text-xs font-medium">Rendering…</span>
                       </div>
                     ))}
+
+                    {/* Completed variants */}
                     {filteredVariants.map((v) => (
                       <MediaCard
                         key={v.id}
@@ -286,6 +296,7 @@ export function LibraryPage() {
                   </div>
                 )}
               </section>
+
             </div>
           )}
         </div>
@@ -308,7 +319,7 @@ export function LibraryPage() {
         open={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
         onJobCreated={(id) => setPendingJobIds((prev) => [...prev, id])}
-        templates={templates}
+        selectedTemplate={selectedTemplate}
       />
     </div>
   )

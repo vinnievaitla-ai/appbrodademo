@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { MoreHorizontal, FileVideo } from 'lucide-react'
+import { MoreHorizontal, FileVideo, Sparkles } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,7 @@ interface MediaCardProps {
   fileUrl: string
   fileSizeBytes: number
   onDelete?: (id: string) => void
+  onGenerate?: (id: string, name: string, fileUrl: string) => void
 }
 
 function formatSize(bytes: number): string {
@@ -23,7 +24,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
-export function MediaCard({ id, name, fileUrl, fileSizeBytes, onDelete }: MediaCardProps) {
+export function MediaCard({ id, name, fileUrl, fileSizeBytes, onDelete, onGenerate }: MediaCardProps) {
   const [videoError, setVideoError] = useState(false)
   const size = formatSize(fileSizeBytes)
 
@@ -44,6 +45,17 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, onDelete }: MediaC
             <FileVideo className="h-8 w-8 text-gray-500" />
           </div>
         )}
+
+        {/* Generate Variant hover overlay */}
+        {onGenerate && (
+          <button
+            onClick={() => onGenerate(id, name, fileUrl)}
+            className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Sparkles className="h-5 w-5 text-white" />
+            <span className="text-white text-xs font-medium">Generate Variant</span>
+          </button>
+        )}
       </div>
 
       {/* Footer */}
@@ -53,18 +65,29 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, onDelete }: MediaC
             <FileVideo className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-px" />
             <span className="text-xs text-gray-900 truncate leading-tight">{name}</span>
           </div>
-          {onDelete && (
+          {(onDelete || onGenerate) && (
             <DropdownMenu>
               <DropdownMenuTrigger className="shrink-0 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
                 <MoreHorizontal className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  className="text-red-600 cursor-pointer"
-                  onClick={() => onDelete(id)}
-                >
-                  Delete
-                </DropdownMenuItem>
+                {onGenerate && (
+                  <DropdownMenuItem
+                    className="cursor-pointer"
+                    onClick={() => onGenerate(id, name, fileUrl)}
+                  >
+                    <Sparkles className="h-3.5 w-3.5 mr-2 text-blue-500" />
+                    Generate Variant
+                  </DropdownMenuItem>
+                )}
+                {onDelete && (
+                  <DropdownMenuItem
+                    className="text-red-600 cursor-pointer"
+                    onClick={() => onDelete(id)}
+                  >
+                    Delete
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
