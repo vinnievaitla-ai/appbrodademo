@@ -1,7 +1,7 @@
 # Appbroda — Project Plan
 
 > **Purpose:** Single source of truth for all product, architecture, and delivery decisions.
-> **Last updated:** 2026-06-03
+> **Last updated:** 2026-06-04
 
 ---
 
@@ -173,22 +173,29 @@ The Library page has:
 
 ## 8. Phases & Task Breakdown
 
-### Phase 1 — Foundation + Library + End Card Generation ✅ (current)
+### Phase 1 — Foundation + Library + End Card Generation ✅ COMPLETE
 
 | # | Task | Status |
 |---|---|---|
-| 1.1 | Initialize repo, workspace config (npm workspaces + Turborepo) | `todo` |
-| 1.2 | Scaffold `apps/web` — Next.js 15 + Tailwind + shadcn/ui | `todo` |
-| 1.3 | Scaffold `apps/renderer` — Express + Dockerfile | `todo` |
-| 1.4 | Supabase: create project, tables (`templates`, `render_jobs`), storage buckets | `todo` |
-| 1.5 | Library page UI — sidebar, grid, MediaCard, FilterBar (matches design reference) | `todo` |
-| 1.6 | Upload template flow — file picker → Supabase Storage → templates table → appears in grid | `todo` |
-| 1.7 | Generate Variants modal — prompt input + submit | `todo` |
-| 1.8 | Claude API integration — prompt → HyperFrames HTML composition | `todo` |
-| 1.9 | Renderer service — POST /render → @hyperframes/producer → MP4 → Supabase Storage | `todo` |
-| 1.10 | Job status polling — 3s interval, updates card state in UI | `todo` |
-| 1.11 | Generated Variants sub-section — shows completed jobs in library grid | `todo` |
-| 1.12 | Deployment: Vercel (web) + Railway (renderer) + env var checklist | `todo` |
+| 1.1 | Initialize repo, workspace config (npm workspaces + Turborepo) | `done` |
+| 1.2 | Scaffold `apps/web` — Next.js 15 + Tailwind + shadcn/ui | `done` |
+| 1.3 | Scaffold `apps/renderer` — Express + Dockerfile | `done` |
+| 1.4 | Supabase: create project, tables (`templates`, `render_jobs`), storage buckets | `done` |
+| 1.5 | Library page UI — TopBar, Sidebar, MediaCard, FilterBar, section headers | `done` |
+| 1.6 | Upload template flow — file picker → Supabase Storage → templates table | `done` |
+| 1.6a | Delete template flow — removes from DB + Supabase Storage | `done` |
+| 1.7 | Generate Variants modal — 2-screen (compose + generating animation) | `done` |
+| 1.8 | Claude API integration — prompt → HyperFrames HTML composition | `done` |
+| 1.9 | Renderer service — POST /render → hyperframes CLI → MP4 → Supabase Storage | `done` |
+| 1.10 | Job status polling — 3s interval, shimmer skeleton cards while rendering | `done` |
+| 1.11 | HF Generated Variants section — completed jobs with HF badge | `done` |
+| 1.12 | Deployment: Vercel (web) + Railway (renderer) — live at appbrodademo-web.vercel.app | `done` |
+
+**Post-launch improvements (also done):**
+- Full UI redesign: TopBar matching reference screenshot, refined sidebar with dot indicator, polished cards with hover overlays, illustrated empty states, shimmer skeletons
+- Error surfacing: upload errors shown in red banner with exact Supabase message
+- RLS disabled on tables (demo, no auth)
+- Dockerfile path + npm ci → npm install fixes for Railway monorepo build
 
 ### Phase 2 — URL-based Template Generation (backlog)
 
