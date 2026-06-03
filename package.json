@@ -1,0 +1,19 @@
+{
+  "name": "appbroda",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:renderer": "npm run dev --workspace=apps/renderer",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:renderer": "npm run build --workspace=apps/renderer"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
