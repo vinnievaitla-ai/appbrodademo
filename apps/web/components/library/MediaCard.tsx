@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { MoreHorizontal, FileVideo, Sparkles } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { MoreHorizontal, FileVideo, Sparkles, Play } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,7 @@ interface MediaCardProps {
   name: string
   fileUrl: string
   fileSizeBytes: number
+  isGenerated?: boolean
   onDelete?: (id: string) => void
   onGenerate?: (id: string, name: string, fileUrl: string) => void
 }
@@ -24,67 +25,105 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
-export function MediaCard({ id, name, fileUrl, fileSizeBytes, onDelete, onGenerate }: MediaCardProps) {
+export function MediaCard({ id, name, fileUrl, fileSizeBytes, isGenerated, onDelete, onGenerate }: MediaCardProps) {
   const [videoError, setVideoError] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const size = formatSize(fileSizeBytes)
 
+  const handleVideoLoad = () => {
+    if (videoRef.current) videoRef.current.currentTime = 0.001
+  }
+
   return (
-    <div className="group w-[196px] rounded-lg border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow cursor-default">
+    <div
+      className="group w-[196px] rounded-xl border border-gray-200 bg-white overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-default"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
       {/* Thumbnail */}
-      <div className="relative bg-gray-900" style={{ aspectRatio: '196/120' }}>
+      <div className="relative overflow-hidden" style={{ aspectRatio: '16/10' }}>
+        <div className="absolute inset-0 bg-gray-950" />
+
         {!videoError ? (
           <video
+            ref={videoRef}
             src={fileUrl}
-            className="w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover"
             preload="metadata"
             muted
+            playsInline
+            onLoadedMetadata={handleVideoLoad}
             onError={() => setVideoError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <FileVideo className="h-8 w-8 text-gray-500" />
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-950">
+            <FileVideo className="h-7 w-7 text-gray-500" />
           </div>
         )}
 
-        {/* Generate Variant hover overlay */}
-        {onGenerate && (
-          <button
-            onClick={() => onGenerate(id, name, fileUrl)}
-            className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <Sparkles className="h-5 w-5 text-white" />
-            <span className="text-white text-xs font-medium">Generate Variant</span>
-          </button>
+        {/* Bottom gradient */}
+        <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+
+        {/* Generated badge */}
+        {isGenerated && (
+          <div className="absolute top-2 left-2 flex items-center gap-1 bg-blue-600/90 backdrop-blur-sm rounded-full px-2 py-0.5">
+            <Sparkles className="h-2.5 w-2.5 text-white" />
+            <span className="text-[9px] font-semibold text-white uppercase tracking-wide">HF</span>
+          </div>
         )}
+
+        {/* Hover overlays */}
+        <div className={`absolute inset-0 transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
+          {onGenerate ? (
+            /* Generate overlay for templates */
+            <button
+              onClick={() => onGenerate(id, name, fileUrl)}
+              className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center gap-2 backdrop-blur-[1px]"
+            >
+              <div className="h-9 w-9 rounded-full bg-white/15 border border-white/30 flex items-center justify-center">
+                <Sparkles className="h-4 w-4 text-white" />
+              </div>
+              <span className="text-white text-[11px] font-semibold tracking-wide">Generate Variant</span>
+            </button>
+          ) : (
+            /* Play overlay for generated variants */
+            <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+              <div className="h-9 w-9 rounded-full bg-white/20 border border-white/40 flex items-center justify-center">
+                <Play className="h-4 w-4 text-white ml-0.5" fill="white" />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Footer */}
-      <div className="px-2.5 py-2">
-        <div className="flex items-start justify-between gap-1">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <FileVideo className="h-3.5 w-3.5 text-gray-400 shrink-0 mt-px" />
-            <span className="text-xs text-gray-900 truncate leading-tight">{name}</span>
+      <div className="px-3 py-2.5">
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <FileVideo className="h-3 w-3 text-gray-400 shrink-0 mt-px" />
+              <span className="text-[12px] font-medium text-gray-800 truncate leading-tight">{name}</span>
+            </div>
+            {size && (
+              <p className="text-[11px] text-gray-400 mt-0.5 pl-[18px]">MP4 · {size}</p>
+            )}
           </div>
+
           {(onDelete || onGenerate) && (
             <DropdownMenu>
-              <DropdownMenuTrigger className="shrink-0 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                <MoreHorizontal className="h-4 w-4" />
+              <DropdownMenuTrigger className="shrink-0 text-gray-300 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-all duration-150 mt-0.5 p-0.5 rounded hover:bg-gray-100">
+                <MoreHorizontal className="h-3.5 w-3.5" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="min-w-[140px]">
                 {onGenerate && (
-                  <DropdownMenuItem
-                    className="cursor-pointer"
-                    onClick={() => onGenerate(id, name, fileUrl)}
-                  >
+                  <DropdownMenuItem className="cursor-pointer text-sm" onClick={() => onGenerate(id, name, fileUrl)}>
                     <Sparkles className="h-3.5 w-3.5 mr-2 text-blue-500" />
                     Generate Variant
                   </DropdownMenuItem>
                 )}
                 {onDelete && (
-                  <DropdownMenuItem
-                    className="text-red-600 cursor-pointer"
-                    onClick={() => onDelete(id)}
-                  >
+                  <DropdownMenuItem className="text-red-500 cursor-pointer text-sm focus:text-red-600" onClick={() => onDelete(id)}>
                     Delete
                   </DropdownMenuItem>
                 )}
@@ -92,9 +131,6 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, onDelete, onGenera
             </DropdownMenu>
           )}
         </div>
-        {size && (
-          <p className="text-[11px] text-gray-400 mt-0.5 pl-5">MP4 • {size}</p>
-        )}
       </div>
     </div>
   )

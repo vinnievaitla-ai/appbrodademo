@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { TopBar } from '../layout/TopBar'
 import { Sidebar } from './Sidebar'
 import { MediaCard } from './MediaCard'
 import { GenerateModal } from '../variants/GenerateModal'
@@ -10,21 +11,49 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ChevronDown, Search, Loader2, Sparkles } from 'lucide-react'
+import { ChevronDown, Search, Loader2, Sparkles, Upload, CalendarDays, SlidersHorizontal, ArrowUpDown } from 'lucide-react'
 import type { Template, RenderJob } from '@/lib/types'
 
 const CATEGORY_LABELS: Record<string, string> = {
-  hook: 'Hook',
-  body: 'Body',
-  text: 'Text',
-  audio: 'Audio',
-  end_card: 'End Card',
+  hook: 'Hook', body: 'Body', text: 'Text', audio: 'Audio', end_card: 'End Card',
 }
 
-interface SelectedTemplate {
-  id: string
-  name: string
-  fileUrl: string
+interface SelectedTemplate { id: string; name: string; fileUrl: string }
+
+function ShimmerCard() {
+  return (
+    <div className="w-[196px] rounded-xl border border-blue-100 bg-white overflow-hidden">
+      <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50" style={{ aspectRatio: '16/10' }}>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <div className="relative">
+            <Sparkles className="h-5 w-5 text-blue-400 animate-pulse" />
+          </div>
+          <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-widest">Rendering</span>
+        </div>
+        {/* shimmer sweep */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-[shimmer_2s_infinite]" />
+      </div>
+      <div className="px-3 py-2.5 space-y-1.5">
+        <div className="h-2.5 bg-gray-100 rounded-full w-3/4 animate-pulse" />
+        <div className="h-2 bg-gray-100 rounded-full w-1/2 animate-pulse" />
+      </div>
+    </div>
+  )
+}
+
+function SectionHeader({ label, count, extra }: { label: string; count?: number; extra?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">{label}</h2>
+      {count !== undefined && count > 0 && (
+        <span className="h-4 min-w-4 px-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 flex items-center justify-center">
+          {count}
+        </span>
+      )}
+      <div className="flex-1 h-px bg-gray-100" />
+      {extra}
+    </div>
+  )
 }
 
 export function LibraryPage() {
@@ -60,22 +89,18 @@ export function LibraryPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Poll for pending jobs every 3s
   useEffect(() => {
     if (pendingJobIds.length === 0) {
       if (pollRef.current) clearInterval(pollRef.current)
       return
     }
-
     pollRef.current = setInterval(async () => {
       const results = await Promise.all(
-        pendingJobIds.map((id) => fetch(`/api/jobs/${id}`).then((r) => r.json()).catch(() => null))
+        pendingJobIds.map(id => fetch(`/api/jobs/${id}`).then(r => r.json()).catch(() => null))
       )
-
       const resolved: string[] = []
       const newVariants: RenderJob[] = []
-
-      results.forEach((res) => {
+      results.forEach(res => {
         if (!res?.job) return
         const { job } = res
         if (job.status === 'done' || job.status === 'failed') {
@@ -83,13 +108,11 @@ export function LibraryPage() {
           if (job.status === 'done') newVariants.push(job)
         }
       })
-
       if (resolved.length > 0) {
-        setPendingJobIds((prev) => prev.filter((id) => !resolved.includes(id)))
-        if (newVariants.length > 0) setVariants((prev) => [...newVariants, ...prev])
+        setPendingJobIds(prev => prev.filter(id => !resolved.includes(id)))
+        if (newVariants.length > 0) setVariants(prev => [...newVariants, ...prev])
       }
     }, 3000)
-
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [pendingJobIds])
 
@@ -101,11 +124,10 @@ export function LibraryPage() {
       formData.append('file', file)
       formData.append('category', activeCategory)
       formData.append('name', file.name)
-
       const res = await fetch('/api/templates', { method: 'POST', body: formData })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Upload failed')
-      setTemplates((prev) => [json.template, ...prev])
+      setTemplates(prev => [json.template, ...prev])
     } catch (e: any) {
       setUploadError(e.message || 'Upload failed')
     } finally {
@@ -114,211 +136,190 @@ export function LibraryPage() {
   }
 
   const handleDeleteTemplate = async (id: string) => {
-    setTemplates((prev) => prev.filter((t) => t.id !== id))
+    setTemplates(prev => prev.filter(t => t.id !== id))
     await fetch(`/api/templates/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
   const openGenerateModal = (templateId?: string, templateName?: string, templateUrl?: string) => {
-    if (templateId && templateName && templateUrl) {
-      setSelectedTemplate({ id: templateId, name: templateName, fileUrl: templateUrl })
-    } else {
-      setSelectedTemplate(null)
-    }
+    setSelectedTemplate(templateId && templateName && templateUrl
+      ? { id: templateId, name: templateName, fileUrl: templateUrl }
+      : null
+    )
     setShowGenerateModal(true)
   }
 
-  const filteredTemplates = templates.filter((t) =>
-    t.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-  const filteredVariants = variants.filter((v) =>
-    (v.prompt ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const q = searchQuery.toLowerCase()
+  const filteredTemplates = templates.filter(t => t.name.toLowerCase().includes(q))
+  const filteredVariants = variants.filter(v => (v.prompt ?? '').toLowerCase().includes(q))
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <Sidebar active={activeCategory} onChange={setActiveCategory} />
+    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
+      <TopBar />
 
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Page header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
-          <h1 className="text-[18px] font-semibold text-gray-900 leading-tight">
-            My Library - {label}
-          </h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            Manage your creatives and create your own ads
-          </p>
-        </div>
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar active={activeCategory} onChange={setActiveCategory} />
 
-        {/* Action bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-2.5 flex items-center gap-3 shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center justify-center gap-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white h-8 px-3 text-sm font-medium transition-colors">
-              {isUploading ? (
-                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
-              ) : (
-                <>Add {label} <ChevronDown className="h-3.5 w-3.5" /></>
-              )}
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                Upload Template
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openGenerateModal()}>
-                <Sparkles className="h-3.5 w-3.5 mr-2 text-blue-500" />
-                Generate Variant
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50">
-            Owner <ChevronDown className="h-3 w-3" />
-          </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-gray-200 rounded-md text-gray-600 hover:bg-gray-50">
-            Date Range <ChevronDown className="h-3 w-3" />
-          </button>
+          {/* Page header */}
+          <div className="bg-white border-b border-gray-200 px-6 py-4 shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-[17px] font-bold text-gray-900 leading-tight tracking-tight">
+                  My Library
+                  <span className="ml-2 text-gray-300 font-light">·</span>
+                  <span className="ml-2 text-blue-600">{label}</span>
+                </h1>
+                <p className="text-[12px] text-gray-400 mt-0.5 font-medium">
+                  Manage your creatives and generate AI-powered ad variants
+                </p>
+              </div>
 
-          <div className="flex-1" />
-
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search"
-              className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-md w-44 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+              {/* Primary CTA */}
+              <DropdownMenu>
+                <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white h-9 px-4 text-sm font-semibold transition-colors shadow-sm shadow-blue-200">
+                  {isUploading
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
+                    : <><span>Add {label}</span> <ChevronDown className="h-3.5 w-3.5 opacity-70" /></>
+                  }
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="cursor-pointer">
+                    <Upload className="h-3.5 w-3.5 mr-2 text-gray-400" />
+                    Upload Template
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => openGenerateModal()} className="cursor-pointer">
+                    <Sparkles className="h-3.5 w-3.5 mr-2 text-blue-500" />
+                    Generate Variant
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            Sort by{' '}
-            <button className="font-medium text-gray-900 flex items-center gap-0.5 ml-1">
-              Latest <ChevronDown className="h-3 w-3" />
+          {/* Filter bar */}
+          <div className="bg-white border-b border-gray-200 px-6 py-2 flex items-center gap-2 shrink-0">
+            <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+              <SlidersHorizontal className="h-3 w-3" /> Owner
+            </button>
+            <button className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors">
+              <CalendarDays className="h-3 w-3" /> Date Range
+            </button>
+            <div className="flex-1" />
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search"
+                className="pl-7 pr-3 py-1.5 text-[11px] border border-gray-200 rounded-lg w-40 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white transition-all"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <button className="flex items-center gap-1 text-[11px] font-medium text-gray-500 hover:text-gray-700 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+              <ArrowUpDown className="h-3 w-3" /> Latest
             </button>
           </div>
-        </div>
 
-        {/* Upload error banner */}
-        {uploadError && (
-          <div className="bg-red-50 border-b border-red-200 px-6 py-2 flex items-center justify-between shrink-0">
-            <p className="text-sm text-red-600">{uploadError}</p>
-            <button onClick={() => setUploadError('')} className="text-red-400 hover:text-red-600 text-xs ml-4">✕</button>
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-40">
-              <Loader2 className="h-5 w-5 animate-spin text-gray-300" />
-            </div>
-          ) : (
-            <div className="space-y-10">
-
-              {/* Templates section */}
-              <section>
-                <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">
-                  Templates
-                </h2>
-                {filteredTemplates.length === 0 ? (
-                  <p className="text-sm text-gray-400">
-                    No templates yet.{' '}
-                    <button className="text-blue-600 underline" onClick={() => fileInputRef.current?.click()}>
-                      Upload one
-                    </button>{' '}
-                    to get started.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-4">
-                    {filteredTemplates.map((t) => (
-                      <MediaCard
-                        key={t.id}
-                        id={t.id}
-                        name={t.name}
-                        fileUrl={t.file_url}
-                        fileSizeBytes={t.file_size_bytes}
-                        onDelete={handleDeleteTemplate}
-                        onGenerate={openGenerateModal}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* HF Generated Variants section */}
-              <section>
-                <div className="flex items-center gap-3 mb-3">
-                  <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wide">
-                    HF Generated Variants
-                  </h2>
-                  {pendingJobIds.length > 0 && (
-                    <span className="flex items-center gap-1 text-xs text-blue-600 font-medium">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      {pendingJobIds.length} rendering…
-                    </span>
-                  )}
-                </div>
-
-                {filteredVariants.length === 0 && pendingJobIds.length === 0 ? (
-                  <p className="text-sm text-gray-400">
-                    No variants yet. Hover over a template and click{' '}
-                    <span className="font-medium text-gray-600">Generate Variant</span> to create one.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-4">
-                    {/* Rendering skeleton cards */}
-                    {pendingJobIds.map((id) => (
-                      <div
-                        key={id}
-                        className="w-[196px] rounded-lg border border-blue-200 bg-blue-50 flex flex-col items-center justify-center gap-2 text-blue-500"
-                        style={{ height: 160 }}
-                      >
-                        <div className="relative">
-                          <Sparkles className="h-5 w-5" />
-                          <div className="absolute inset-0 animate-ping opacity-40">
-                            <Sparkles className="h-5 w-5" />
-                          </div>
-                        </div>
-                        <span className="text-xs font-medium">Rendering…</span>
-                      </div>
-                    ))}
-
-                    {/* Completed variants */}
-                    {filteredVariants.map((v) => (
-                      <MediaCard
-                        key={v.id}
-                        id={v.id}
-                        name={v.prompt.slice(0, 40) + (v.prompt.length > 40 ? '…' : '')}
-                        fileUrl={v.output_url!}
-                        fileSizeBytes={0}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-
+          {/* Upload error */}
+          {uploadError && (
+            <div className="bg-red-50 border-b border-red-100 px-6 py-2 flex items-center justify-between shrink-0">
+              <p className="text-xs text-red-600 font-medium">{uploadError}</p>
+              <button onClick={() => setUploadError('')} className="text-red-300 hover:text-red-500 ml-4 text-xs">✕</button>
             </div>
           )}
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-48">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+                  <span className="text-xs text-gray-400 font-medium">Loading library…</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-10">
+
+                {/* Templates */}
+                <section>
+                  <SectionHeader label="Templates" count={filteredTemplates.length} />
+                  {filteredTemplates.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-200 rounded-2xl text-center bg-white/50">
+                      <div className="h-10 w-10 rounded-xl bg-gray-100 flex items-center justify-center mb-3">
+                        <Upload className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-700 mb-1">No templates yet</p>
+                      <p className="text-xs text-gray-400 mb-4">Upload your first End Card template to get started</p>
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                      >
+                        Upload Template
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-4">
+                      {filteredTemplates.map(t => (
+                        <MediaCard key={t.id} id={t.id} name={t.name} fileUrl={t.file_url}
+                          fileSizeBytes={t.file_size_bytes} onDelete={handleDeleteTemplate} onGenerate={openGenerateModal} />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* HF Generated Variants */}
+                <section>
+                  <SectionHeader
+                    label="HF Generated Variants"
+                    count={filteredVariants.length}
+                    extra={pendingJobIds.length > 0 && (
+                      <span className="flex items-center gap-1.5 text-[11px] text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-full">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        {pendingJobIds.length} rendering
+                      </span>
+                    )}
+                  />
+
+                  {filteredVariants.length === 0 && pendingJobIds.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-blue-100 rounded-2xl text-center bg-blue-50/30">
+                      <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center mb-3">
+                        <Sparkles className="h-5 w-5 text-blue-500" />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-700 mb-1">No variants generated yet</p>
+                      <p className="text-xs text-gray-400 mb-4">Hover a template card and click Generate Variant</p>
+                      <button
+                        onClick={() => openGenerateModal()}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" /> Generate Variant
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-4">
+                      {pendingJobIds.map(id => <ShimmerCard key={id} />)}
+                      {filteredVariants.map(v => (
+                        <MediaCard key={v.id} id={v.id}
+                          name={v.prompt.slice(0, 38) + (v.prompt.length > 38 ? '…' : '')}
+                          fileUrl={v.output_url!} fileSizeBytes={0} isGenerated />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) handleUpload(file)
-          e.target.value = ''
-        }}
-      />
+      <input ref={fileInputRef} type="file" accept="video/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = '' }} />
 
       <GenerateModal
         open={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
-        onJobCreated={(id) => setPendingJobIds((prev) => [...prev, id])}
+        onJobCreated={id => setPendingJobIds(prev => [...prev, id])}
         selectedTemplate={selectedTemplate}
       />
     </div>
