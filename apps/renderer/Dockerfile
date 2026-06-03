@@ -3,7 +3,7 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 COPY apps/renderer/package*.json ./
-RUN npm ci
+RUN npm install
 COPY apps/renderer/tsconfig.json ./
 COPY apps/renderer/src ./src
 RUN npm run build
@@ -39,7 +39,7 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 COPY apps/renderer/package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
 
 RUN mkdir -p /app/tmp
