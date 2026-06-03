@@ -20,22 +20,33 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 interface SelectedTemplate { id: string; name: string; fileUrl: string }
 
-function ShimmerCard() {
+function ShimmerCard({ jobId }: { jobId: string }) {
+  const [status, setStatus] = useState('pending')
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const res = await fetch(`/api/jobs/${jobId}`)
+        const { job } = await res.json()
+        if (job?.status) setStatus(job.status)
+      } catch {}
+    }
+    check()
+    const t = setInterval(check, 4000)
+    return () => clearInterval(t)
+  }, [jobId])
+
   return (
     <div className="w-[196px] rounded-xl border border-blue-100 bg-white overflow-hidden">
       <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50" style={{ aspectRatio: '16/10' }}>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-          <div className="relative">
-            <Sparkles className="h-5 w-5 text-blue-400 animate-pulse" />
-          </div>
-          <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-widest">Rendering</span>
+          <Sparkles className="h-5 w-5 text-blue-400 animate-pulse" />
+          <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-widest">{status}</span>
         </div>
-        {/* shimmer sweep */}
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-[shimmer_2s_infinite]" />
       </div>
-      <div className="px-3 py-2.5 space-y-1.5">
-        <div className="h-2.5 bg-gray-100 rounded-full w-3/4 animate-pulse" />
-        <div className="h-2 bg-gray-100 rounded-full w-1/2 animate-pulse" />
+      <div className="px-3 py-2 space-y-1">
+        <p className="text-[10px] text-gray-400 font-mono truncate">{jobId.slice(0, 8)}…</p>
       </div>
     </div>
   )
@@ -332,7 +343,7 @@ export function LibraryPage() {
                     </div>
                   ) : (
                     <div className="flex flex-wrap gap-4">
-                      {pendingJobIds.map(id => <ShimmerCard key={id} />)}
+                      {pendingJobIds.map(id => <ShimmerCard key={id} jobId={id} />)}
                       {failedJobs.map(f => (
                         <div key={f.id} className="w-[196px] rounded-xl border border-red-200 bg-red-50 overflow-hidden">
                           <div className="flex flex-col items-center justify-center gap-1.5 text-red-300 bg-red-100/60" style={{ aspectRatio: '16/10' }}>
