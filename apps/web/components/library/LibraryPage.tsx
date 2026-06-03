@@ -61,6 +61,7 @@ export function LibraryPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [variants, setVariants] = useState<RenderJob[]>([])
   const [pendingJobIds, setPendingJobIds] = useState<string[]>([])
+  const [failedJobs, setFailedJobs] = useState<{ id: string; error: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -89,32 +90,50 @@ export function LibraryPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
+  // Use a ref so the interval callback always sees current job IDs (no stale closure)
+  const pendingJobIdsRef = useRef<string[]>([])
+  useEffect(() => { pendingJobIdsRef.current = pendingJobIds }, [pendingJobIds])
+
   useEffect(() => {
     if (pendingJobIds.length === 0) {
-      if (pollRef.current) clearInterval(pollRef.current)
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
       return
     }
+    if (pollRef.current) return // interval already running
+
     pollRef.current = setInterval(async () => {
+      const ids = pendingJobIdsRef.current
+      if (ids.length === 0) return
+
       const results = await Promise.all(
-        pendingJobIds.map(id => fetch(`/api/jobs/${id}`).then(r => r.json()).catch(() => null))
+        ids.map(id => fetch(`/api/jobs/${id}`).then(r => r.json()).catch(() => null))
       )
+
       const resolved: string[] = []
       const newVariants: RenderJob[] = []
+      const newFailed: { id: string; error: string }[] = []
+
       results.forEach(res => {
         if (!res?.job) return
         const { job } = res
-        if (job.status === 'done' || job.status === 'failed') {
+        if (job.status === 'done') {
           resolved.push(job.id)
-          if (job.status === 'done') newVariants.push(job)
+          newVariants.push(job)
+        } else if (job.status === 'failed') {
+          resolved.push(job.id)
+          newFailed.push({ id: job.id, error: job.error_message || 'Render failed' })
         }
       })
+
       if (resolved.length > 0) {
         setPendingJobIds(prev => prev.filter(id => !resolved.includes(id)))
         if (newVariants.length > 0) setVariants(prev => [...newVariants, ...prev])
+        if (newFailed.length > 0) setFailedJobs(prev => [...prev, ...newFailed])
       }
     }, 3000)
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
-  }, [pendingJobIds])
+
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
+  }, [pendingJobIds.length]) // only restart the interval when count changes, not content
 
   const handleUpload = async (file: File) => {
     setIsUploading(true)
@@ -297,7 +316,7 @@ export function LibraryPage() {
                     )}
                   />
 
-                  {filteredVariants.length === 0 && pendingJobIds.length === 0 ? (
+                  {filteredVariants.length === 0 && pendingJobIds.length === 0 && failedJobs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-blue-100 rounded-2xl text-center bg-blue-50/30">
                       <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center mb-3">
                         <Sparkles className="h-5 w-5 text-blue-500" />
@@ -314,6 +333,19 @@ export function LibraryPage() {
                   ) : (
                     <div className="flex flex-wrap gap-4">
                       {pendingJobIds.map(id => <ShimmerCard key={id} />)}
+                      {failedJobs.map(f => (
+                        <div key={f.id} className="w-[196px] rounded-xl border border-red-200 bg-red-50 overflow-hidden">
+                          <div className="flex flex-col items-center justify-center gap-1.5 text-red-300 bg-red-100/60" style={{ aspectRatio: '16/10' }}>
+                            <span className="text-2xl">✕</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">Render failed</span>
+                          </div>
+                          <div className="px-3 py-2 border-t border-red-100">
+                            <p className="text-[10px] text-red-500 leading-snug line-clamp-2">{f.error}</p>
+                            <button onClick={() => setFailedJobs(p => p.filter(j => j.id !== f.id))}
+                              className="text-[10px] text-red-400 hover:text-red-600 mt-1 underline">Dismiss</button>
+                          </div>
+                        </div>
+                      ))}
                       {filteredVariants.map(v => (
                         <MediaCard key={v.id} id={v.id}
                           name={v.prompt.slice(0, 38) + (v.prompt.length > 38 ? '…' : '')}

@@ -96,14 +96,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Renderer service URL not set' }, { status: 500 })
   }
 
-  // Non-blocking dispatch to renderer
-  fetch(`${rendererUrl}/render`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rendererSecret}` },
-    body: JSON.stringify({ jobId: job.id, htmlContent })
-  }).catch(async (err) => {
-    await supabase.from('render_jobs').update({ status: 'failed', error_message: err.message }).eq('id', job.id)
-  })
+  // Await Railway — it responds immediately with { status: 'accepted' } then renders async.
+  // Must be awaited: Vercel freezes the process the moment we return, so a fire-and-forget
+  // fetch would never actually be sent.
+  try {
+    const rendererRes = await fetch(`${rendererUrl}/render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rendererSecret}` },
+      body: JSON.stringify({ jobId: job.id, htmlContent }),
+    })
+    if (!rendererRes.ok) {
+      const text = await rendererRes.text().catch(() => rendererRes.status.toString())
+      await supabase.from('render_jobs')
+        .update({ status: 'failed', error_message: `Renderer ${rendererRes.status}: ${text}` })
+        .eq('id', job.id)
+    }
+  } catch (err: any) {
+    await supabase.from('render_jobs')
+      .update({ status: 'failed', error_message: 'Renderer unreachable: ' + err.message })
+      .eq('id', job.id)
+  }
 
   return NextResponse.json({ jobId: job.id })
 }
