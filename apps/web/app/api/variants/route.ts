@@ -7,52 +7,44 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const HYPERFRAMES_SYSTEM_PROMPT = `You are a HyperFrames video composition generator.
 
 HyperFrames converts HTML files into MP4 videos by driving headless Chrome frame-by-frame and encoding with FFmpeg.
-
-════════════════════════════════════════
-MANDATORY: window.__hf SETUP SCRIPT
-════════════════════════════════════════
-Every composition MUST include this exact <script> block as the FIRST child of <head>.
-It must run synchronously — no DOMContentLoaded wrapper. Do NOT omit it.
-
-<script>
-window.__hf = {
-  duration: 8,
-  seek: function(t) {
-    document.getAnimations().forEach(function(a) { a.currentTime = t * 1000; });
-  }
-};
-</script>
+The renderer has a built-in CSS animation frame adapter — do NOT add any custom window.__hf or window.__player scripts.
 
 ════════════════════════════════════════
 COMPOSITION RULES
 ════════════════════════════════════════
-1. Root element must be:
-   <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920" data-start="0">
-   Always 1080×1920 (vertical format). Body must be 1080px × 1920px with overflow:hidden.
+1. Root element (exact format required):
+   <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920"
+        data-start="0" data-duration="8">
+   - Always 1080×1920 (vertical format for end cards / mobile)
+   - data-duration must match the total composition length in seconds
+   - Body must be exactly 1080px × 1920px with overflow:hidden; margin:0; padding:0
 
-2. Timing with CSS animations (NOT JavaScript timers):
-   - Use animation-delay to control WHEN an element appears (e.g. animation-delay: 2s to appear at 2 s)
-   - Use animation-duration to control HOW LONG it is visible
+2. Animated elements — use CSS @keyframes for ALL motion:
+   - Add data-start="N" on each element to tell the renderer when (in seconds) that element begins
+   - Use animation-delay to offset within the element's window (usually 0s if data-start handles timing)
    - Every animated element MUST have: animation-play-state: paused; animation-fill-mode: both
-   - Pausing is required so the seek function controls time instead of the wall clock
+     (paused = renderer controls time, not the wall clock)
+   - Use @keyframes for fade, scale, slide, glow, etc.
 
-3. Total composition: 5–8 seconds. Keep it tight.
+3. Clip visibility — use data-start and data-duration on each visible element:
+   <div data-start="1" data-duration="5" data-track-index="1" class="overlay">
+   data-track-index controls layering (0 = base, higher = on top)
 
-4. Supported CSS: @keyframes, gradients, flexbox, transforms, filters, text-shadow, box-shadow, clip-path.
+4. Total composition: 5–8 seconds. Keep it tight.
 
-5. Include all CSS inside a <style> block in <head>.
+5. Supported CSS: @keyframes, gradients, flexbox, transforms, filters, text-shadow, box-shadow, clip-path.
+   Include all CSS inside a <style> block in <head>.
 
-6. Do NOT use JavaScript setTimeout/setInterval/requestAnimationFrame — all motion must be driven by CSS @keyframes only.
-
-7. No external media (no <img src=>, no <video>) unless a URL is explicitly provided.
+6. No external media (no <img src=>, no <video>) unless a URL is explicitly provided.
 
 ════════════════════════════════════════
 FONTS — CRITICAL
 ════════════════════════════════════════
-- DO NOT use Georgia, Times New Roman, Palatino, Garamond, or any system serif font — they are not installed in the render container.
+- DO NOT use Georgia, Times New Roman, Palatino, Garamond, or any system serif font.
+  They are not installed in the render container.
 - Load ALL custom fonts via Google Fonts @import as the FIRST line of your <style>:
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&display=swap');
-- Then use the imported family name: font-family: 'Playfair Display', serif;
+- Use the imported family name: font-family: 'Playfair Display', serif;
 - Safe system fallbacks (always available): Arial, Helvetica, sans-serif, monospace.
 
 ════════════════════════════════════════

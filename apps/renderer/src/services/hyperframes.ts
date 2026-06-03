@@ -4,33 +4,34 @@ import * as path from 'path'
 
 const TMP_DIR = path.join(process.cwd(), 'tmp')
 
-// HyperFrames requires window.__hf = { duration, seek } to be present on the page.
-// The CLI never injects this itself — the HTML must expose it. We inject it at the
-// top of <head> so it is set synchronously before any other script runs, regardless
-// of what Claude generated.
-const HF_RUNTIME = `<script>
-window.__hf = {
-  duration: 8,
-  seek: function(t) {
-    document.getAnimations().forEach(function(a) { a.currentTime = t * 1000; });
-  }
-};
-</script>`
-
-function injectHfRuntime(html: string): string {
-  if (html.includes('<head>')) return html.replace('<head>', '<head>\n' + HF_RUNTIME)
-  if (html.includes('<html>')) return html.replace('<html>', '<html>\n<head>' + HF_RUNTIME + '</head>')
-  return HF_RUNTIME + '\n' + html
+// HyperFrames computes window.__hf.duration via this chain:
+//   bridge.getDuration() = p.getDuration() > 0 ? p.getDuration() : getDeclaredDuration()
+//   getDeclaredDuration() reads data-duration from the [data-composition-id] root element
+//
+// The runtime player (p) returns getDuration()=0 when generated HTML has no clip
+// data-duration attributes (CSS-animation-only compositions). So we must ensure the
+// root element always has data-duration — otherwise window.__hf.duration stays 0
+// and FrameCapture times out after 45 s.
+//
+// The HyperFrames runtime also has a built-in CSS frame adapter that seeks
+// CSS animations via animation.currentTime, so no additional seek injection is needed.
+function ensureDataDuration(html: string, defaultSeconds = 8): string {
+  // Add data-duration to the [data-composition-id] element if it's missing.
+  return html.replace(
+    /(<(?:div|section|article|main|span)[^>]*\bdata-composition-id="[^"]*"[^>]*?)(\s*>)/,
+    (match, prefix, close) => {
+      if (/\bdata-duration\b/.test(prefix)) return match
+      return `${prefix} data-duration="${defaultSeconds}"${close}`
+    }
+  )
 }
 
 export function renderComposition(htmlContent: string, jobId: string): string {
-  // HyperFrames render expects a project directory, not a bare HTML file.
-  // Write index.html into a per-job directory and pass the directory path.
   const jobDir = path.join(TMP_DIR, jobId)
   const outputPath = path.join(TMP_DIR, `${jobId}.mp4`)
 
   fs.mkdirSync(jobDir, { recursive: true })
-  fs.writeFileSync(path.join(jobDir, 'index.html'), injectHfRuntime(htmlContent), 'utf-8')
+  fs.writeFileSync(path.join(jobDir, 'index.html'), ensureDataDuration(htmlContent), 'utf-8')
 
   execSync(`npx hyperframes render ${jobDir} -o ${outputPath}`, {
     timeout: 300_000,
