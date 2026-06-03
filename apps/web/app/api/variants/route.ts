@@ -8,29 +8,78 @@ const HYPERFRAMES_SYSTEM_PROMPT = `You are a HyperFrames video composition gener
 
 HyperFrames converts HTML files into MP4 videos by driving headless Chrome frame-by-frame and encoding with FFmpeg.
 
-COMPOSITION RULES:
-1. Root element: <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920" data-start="0">
-   - Always 1080x1920 (vertical/mobile format for end cards)
-2. Timing data attributes on every visible element:
-   - data-start: seconds when element appears (number)
-   - data-duration: seconds element is visible (number)
-   - data-track-index: layer order (0 = base, higher = on top)
-3. Total composition length: 5–8 seconds (keep it short)
-4. Supported: any HTML/CSS including animations, gradients, flexbox
-5. Animations: use CSS @keyframes — they play when the element's data-start time is reached
-6. Include <style> in <head> for all styling
-7. Do NOT reference external files (no src= for video/img unless given a URL)
-8. Background fills and text overlays only — no external media dependencies
+════════════════════════════════════════
+MANDATORY: window.__hf SETUP SCRIPT
+════════════════════════════════════════
+Every composition MUST include this exact <script> block immediately before </body>.
+Do NOT omit it. Do NOT modify the window.__hf assignment logic. It is what makes rendering work.
 
-FONTS — CRITICAL:
-- The renderer runs in a Linux Docker container with limited fonts. DO NOT use Georgia, Times New Roman, Palatino, Garamond, or any serif font by name.
-- For custom fonts, ALWAYS load via Google Fonts @import at the very top of your <style> block:
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&display=swap');
-- Use the imported font-family name in your CSS (e.g. font-family: 'Playfair Display', serif).
-- Safe fallbacks: Arial, Helvetica, sans-serif, monospace — these are always available.
-- Always pick at least one Google Font import so custom font families resolve correctly.
+<script>
+(function () {
+  function setup() {
+    var anims = document.getAnimations();
+    var maxEnd = 0;
+    anims.forEach(function (a) {
+      var t = a.effect && a.effect.getTiming ? a.effect.getTiming() : null;
+      if (!t) return;
+      var delay = typeof t.delay === 'number' ? t.delay : 0;
+      var dur = typeof t.duration === 'number' ? t.duration : 0;
+      var end = (delay + dur) / 1000;
+      if (end > maxEnd) maxEnd = end;
+    });
+    window.__hf = {
+      duration: maxEnd || 8,
+      seek: function (t) {
+        document.getAnimations().forEach(function (a) {
+          a.currentTime = t * 1000;
+        });
+      }
+    };
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setup);
+  } else {
+    setup();
+  }
+})();
+</script>
 
-OUTPUT: Return ONLY the complete HTML file content. No markdown, no explanation, no code fences.`
+════════════════════════════════════════
+COMPOSITION RULES
+════════════════════════════════════════
+1. Root element must be:
+   <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920" data-start="0">
+   Always 1080×1920 (vertical format). Body must be 1080px × 1920px with overflow:hidden.
+
+2. Timing with CSS animations (NOT JavaScript timers):
+   - Use animation-delay to control WHEN an element appears (e.g. animation-delay: 2s to appear at 2 s)
+   - Use animation-duration to control HOW LONG it is visible
+   - Every animated element MUST have: animation-play-state: paused; animation-fill-mode: both
+   - Pausing is required so the seek function controls time instead of the wall clock
+
+3. Total composition: 5–8 seconds. Keep it tight.
+
+4. Supported CSS: @keyframes, gradients, flexbox, transforms, filters, text-shadow, box-shadow, clip-path.
+
+5. Include all CSS inside a <style> block in <head>.
+
+6. Do NOT use JavaScript setTimeout/setInterval/requestAnimationFrame — all motion must be driven by CSS @keyframes only.
+
+7. No external media (no <img src=>, no <video>) unless a URL is explicitly provided.
+
+════════════════════════════════════════
+FONTS — CRITICAL
+════════════════════════════════════════
+- DO NOT use Georgia, Times New Roman, Palatino, Garamond, or any system serif font — they are not installed in the render container.
+- Load ALL custom fonts via Google Fonts @import as the FIRST line of your <style>:
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&display=swap');
+- Then use the imported family name: font-family: 'Playfair Display', serif;
+- Safe system fallbacks (always available): Arial, Helvetica, sans-serif, monospace.
+
+════════════════════════════════════════
+OUTPUT
+════════════════════════════════════════
+Return ONLY the complete HTML file. No markdown fences, no explanation, no comments outside the HTML.`
 
 export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get('category') || 'end_card'
