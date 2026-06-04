@@ -5,6 +5,7 @@ import { TopBar } from '../layout/TopBar'
 import { Sidebar } from './Sidebar'
 import { MediaCard } from './MediaCard'
 import { GenerateModal } from '../variants/GenerateModal'
+import { VariantCard } from '../variants/VariantCard'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -186,6 +187,10 @@ export function LibraryPage() {
     await fetch(`/api/templates/${id}`, { method: 'DELETE' }).catch(() => {})
   }
 
+  const handleDeleteVariant = (id: string) => {
+    setVariants(prev => prev.filter(v => v.id !== id))
+  }
+
   const openGenerateModal = (templateId?: string, templateName?: string, templateUrl?: string) => {
     setSelectedTemplate(templateId && templateName && templateUrl
       ? { id: templateId, name: templateName, fileUrl: templateUrl }
@@ -358,9 +363,13 @@ export function LibraryPage() {
                         </div>
                       ))}
                       {filteredVariants.map(v => (
-                        <MediaCard key={v.id} id={v.id}
-                          name={v.prompt.slice(0, 38) + (v.prompt.length > 38 ? '…' : '')}
-                          fileUrl={v.output_url!} fileSizeBytes={0} isGenerated />
+                        <VariantCard
+                          key={v.id}
+                          id={v.id}
+                          prompt={v.prompt}
+                          outputUrl={v.output_url!}
+                          onDelete={handleDeleteVariant}
+                        />
                       ))}
                     </div>
                   )}
