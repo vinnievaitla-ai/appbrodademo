@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express'
+import * as fs from 'fs'
+import * as path from 'path'
 import { renderComposition, cleanupTmp } from '../services/hyperframes'
 import { uploadGeneratedVariant, updateJobStatus } from '../services/storage'
 
@@ -36,9 +38,25 @@ router.post('/render', (req: Request, res: Response) => {
       })
     } catch (err: any) {
       console.error(`Render failed for job ${jobId}:`, err.message)
+
+      // Read the sanitized HTML before cleanup to debug data-composition-id / data-duration issues.
+      let htmlDebug = ''
+      try {
+        const indexPath = path.join('/app/tmp', jobId, 'index.html')
+        const raw = fs.readFileSync(indexPath, 'utf-8')
+        // Extract up to 400 chars around the first data-composition-id occurrence.
+        const idx = raw.indexOf('data-composition-id')
+        if (idx === -1) {
+          htmlDebug = '\n[HTML debug] data-composition-id NOT FOUND in sanitized HTML'
+        } else {
+          const snippet = raw.substring(Math.max(0, idx - 60), idx + 340)
+          htmlDebug = '\n[HTML debug] ...around composition root:\n' + snippet
+        }
+      } catch { /* file may not exist if hyperframes never wrote it */ }
+
       await updateJobStatus(jobId, {
         status: 'failed',
-        error_message: err.message,
+        error_message: err.message + htmlDebug,
         completed_at: new Date().toISOString(),
       })
     } finally {
