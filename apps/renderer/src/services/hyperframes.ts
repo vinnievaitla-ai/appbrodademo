@@ -28,22 +28,24 @@ const TMP_DIR = path.join(process.cwd(), 'tmp')
 // runtime and loses — window.__timelines appears empty. Synchronous <head> execution
 // guarantees the stubs are visible before the runtime ever inspects the registry.
 //
-// NOTE on attempted CSS duration detection:
-//   getAnimations().effect.getTiming().duration → wrong: Chrome headless-shell returns
-//     seconds, not ms, so /1000 produced near-zero values (1 frame captured).
-//   getComputedStyle('*').animationDuration → wrong: forced a synchronous style flush
-//     across every element, spiking Chrome's memory and reducing the OOM threshold from
-//     ~61 frames to ~23 frames. Also returned sub-second values for unknown reasons.
+// Duration accuracy: HyperFrames 0.6.72 bridge sets window.__hf.duration as:
+//   max(p.getDuration(), getDeclaredDuration())  where p is the CSS frame adapter player.
+// p.getDuration() calls timeline.duration() on window.__timelines['variant'].
+// If the stub duration doesn't match the actual composition duration, the bridge reports
+// a wrong duration (or 0 if the compiled HTML's data-duration attribute was stripped by
+// HyperFrames' own linkedom re-serialization pipeline). Fix: always use the actual
+// composition duration in the stub so p.getDuration() is authoritative.
 //
-//   Both approaches were reverted. The correct strategy is:
-//   • Keep data-duration simple: if missing/zero, default to the render fps × duration.
-//   • Use --fps 15 so a 3 s composition = 45 total frames, safely below Chrome's ~61-frame
-//     OOM ceiling in the container.
-const TIMELINE_STUB_SCRIPT = `<script>
+// DOMContentLoaded: ALWAYS overwrite the stub so that even if the synchronous stub was
+// registered with the wrong duration (race conditions or template reuse), it gets fixed
+// before the HyperFrames runtime finishes discovering timelines.
+function buildTimelineStubScript(durationSecs: number): string {
+  return `<script>
 (function () {
   window.__timelines = window.__timelines || {};
+  var COMP_DURATION = ${durationSecs};
   function makeStub(dur) {
-    var d = dur || 3;
+    var d = dur || COMP_DURATION;
     return {
       seek: function () { return this; },
       time: function () { return 0; },
@@ -54,22 +56,22 @@ const TIMELINE_STUB_SCRIPT = `<script>
       kill: function () {}
     };
   }
-  // Register synchronously for the standard composition id used in generated HTML.
-  // This runs in <head>, before the HyperFrames RUNTIME_IIFE, so the stub is
-  // present when the runtime queries window.__timelines on DOMContentLoaded.
-  if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(3);
-  // Our DOMContentLoaded fires before HyperFrames' (we're earlier in <head>).
-  // Use it to guarantee data-duration > 0 and register stubs for non-'variant' ids.
+  // Register synchronously so the stub is visible before the HyperFrames RUNTIME_IIFE.
+  window.__timelines['variant'] = makeStub(COMP_DURATION);
+  // On DOMContentLoaded, fix data-duration on the root if missing and update all stubs.
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-composition-id]').forEach(function (el) {
       var id  = el.getAttribute('data-composition-id');
       var dur = parseFloat(el.getAttribute('data-duration') || '0');
-      if (!(dur > 0)) el.setAttribute('data-duration', '3');
-      if (id && !window.__timelines[id]) window.__timelines[id] = makeStub(dur > 0 ? dur : 3);
+      if (!(dur > 0)) el.setAttribute('data-duration', String(COMP_DURATION));
+      // Always overwrite — ensures the stub duration matches even if HyperFrames'
+      // compilation pipeline stripped data-duration from the compiled HTML.
+      if (id) window.__timelines[id] = makeStub(dur > 0 ? dur : COMP_DURATION);
     });
   });
 })();
-</script>`
+</script>`;
+}
 
 function sanitizeHtml(html: string, defaultDuration = 3): string {
   let found = false
@@ -121,13 +123,14 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
     }
   }
 
-  // Fix 2 – inject timeline stub into <head>
+  // Fix 2 – inject duration-aware timeline stub into <head>
+  const timelineStub = buildTimelineStubScript(defaultDuration)
   if (html.includes('<head>')) {
-    html = html.replace('<head>', '<head>\n' + TIMELINE_STUB_SCRIPT)
+    html = html.replace('<head>', '<head>\n' + timelineStub)
   } else if (html.includes('<html>')) {
-    html = html.replace('<html>', '<html>\n<head>' + TIMELINE_STUB_SCRIPT + '</head>')
+    html = html.replace('<html>', '<html>\n<head>' + timelineStub + '</head>')
   } else {
-    html = TIMELINE_STUB_SCRIPT + '\n' + html
+    html = timelineStub + '\n' + html
   }
 
   return html
