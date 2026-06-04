@@ -13,7 +13,7 @@ interface SelectedTemplate {
 interface GenerateModalProps {
   open: boolean
   onClose: () => void
-  onJobCreated: (jobId: string) => void
+  onJobsCreated: (jobIds: string[]) => void
   selectedTemplate?: SelectedTemplate | null
 }
 
@@ -24,7 +24,7 @@ const STEPS = [
   { label: 'Rendering in progress', sub: 'Sit tight — this takes 30–90 seconds' },
 ]
 
-export function GenerateModal({ open, onClose, onJobCreated, selectedTemplate }: GenerateModalProps) {
+export function GenerateModal({ open, onClose, onJobsCreated, selectedTemplate }: GenerateModalProps) {
   const [screen, setScreen] = useState<'compose' | 'generating'>('compose')
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState('')
@@ -61,7 +61,7 @@ export function GenerateModal({ open, onClose, onJobCreated, selectedTemplate }:
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Generation failed')
-      onJobCreated(data.jobId)
+      onJobsCreated(data.jobIds ?? (data.jobId ? [data.jobId] : []))
       onClose()
     } catch (e: any) {
       setError(e.message || 'Something went wrong')

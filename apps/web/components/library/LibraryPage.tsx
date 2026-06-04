@@ -6,6 +6,7 @@ import { Sidebar } from './Sidebar'
 import { MediaCard } from './MediaCard'
 import { GenerateModal } from '../variants/GenerateModal'
 import { VariantCard } from '../variants/VariantCard'
+import { FolderPickerModal } from '../folders/FolderPickerModal'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +14,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { ChevronDown, Search, Loader2, Sparkles, Upload, CalendarDays, SlidersHorizontal, ArrowUpDown } from 'lucide-react'
-import type { Template, RenderJob } from '@/lib/types'
+import type { Template, RenderJob, Folder } from '@/lib/types'
+import { getFolders, getVariantFolder } from '@/lib/folders'
 
 const CATEGORY_LABELS: Record<string, string> = {
   hook: 'Hook', body: 'Body', text: 'Text', audio: 'Audio', end_card: 'End Card',
@@ -38,15 +40,15 @@ function ShimmerCard({ jobId }: { jobId: string }) {
   }, [jobId])
 
   return (
-    <div className="w-[196px] rounded-xl border border-blue-100 bg-white overflow-hidden">
-      <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50" style={{ aspectRatio: '16/10' }}>
+    <div className="w-[148px] rounded-xl border border-blue-100 bg-white overflow-hidden">
+      <div className="relative bg-gradient-to-br from-blue-50 to-indigo-50 flex-shrink-0" style={{ aspectRatio: '9/16' }}>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
           <Sparkles className="h-5 w-5 text-blue-400 animate-pulse" />
           <span className="text-[10px] font-semibold text-blue-500 uppercase tracking-widest">{status}</span>
         </div>
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-[shimmer_2s_infinite]" />
       </div>
-      <div className="px-3 py-2 space-y-1">
+      <div className="px-2.5 py-2 space-y-1">
         <p className="text-[10px] text-gray-400 font-mono truncate">{jobId.slice(0, 8)}…</p>
       </div>
     </div>
@@ -80,10 +82,20 @@ export function LibraryPage() {
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<SelectedTemplate | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+
+  // Folder state
+  const [folders, setFolders] = useState<Folder[]>([])
+  const [activeFolder, setActiveFolder] = useState<string | null>(null)
+  const [showFolderPicker, setShowFolderPicker] = useState(false)
+  const [justCompletedIds, setJustCompletedIds] = useState<string[]>([])
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const label = CATEGORY_LABELS[activeCategory] ?? 'End Card'
+
+  // Load folders from localStorage on mount
+  useEffect(() => { setFolders(getFolders()) }, [])
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -102,7 +114,6 @@ export function LibraryPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Use a ref so the interval callback always sees current job IDs (no stale closure)
   const pendingJobIdsRef = useRef<string[]>([])
   useEffect(() => { pendingJobIdsRef.current = pendingJobIds }, [pendingJobIds])
 
@@ -111,7 +122,7 @@ export function LibraryPage() {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
       return
     }
-    if (pollRef.current) return // interval already running
+    if (pollRef.current) return
 
     pollRef.current = setInterval(async () => {
       const ids = pendingJobIdsRef.current
@@ -139,34 +150,29 @@ export function LibraryPage() {
 
       if (resolved.length > 0) {
         setPendingJobIds(prev => prev.filter(id => !resolved.includes(id)))
-        if (newVariants.length > 0) setVariants(prev => [...newVariants, ...prev])
+        if (newVariants.length > 0) {
+          setVariants(prev => [...newVariants, ...prev])
+          // Trigger folder picker for newly completed variants
+          setJustCompletedIds(newVariants.map(v => v.id))
+          setShowFolderPicker(true)
+        }
         if (newFailed.length > 0) setFailedJobs(prev => [...prev, ...newFailed])
       }
     }, 3000)
 
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
-  }, [pendingJobIds.length]) // only restart the interval when count changes, not content
+  }, [pendingJobIds.length])
 
   const handleUpload = async (file: File) => {
     setIsUploading(true)
     setUploadError('')
     try {
       const ext = file.name.split('.').pop() || 'mp4'
-
-      // Step 1: get a signed upload URL from Supabase (via our API)
       const urlRes = await fetch(`/api/templates/upload-url?ext=${ext}`)
       if (!urlRes.ok) throw new Error('Could not get upload URL')
       const { signedUrl, path } = await urlRes.json()
-
-      // Step 2: upload the file directly to Supabase — bypasses Vercel body limit
-      const putRes = await fetch(signedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      })
+      const putRes = await fetch(signedUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
       if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
-
-      // Step 3: save metadata to DB via our API
       const metaRes = await fetch('/api/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -201,14 +207,24 @@ export function LibraryPage() {
 
   const q = searchQuery.toLowerCase()
   const filteredTemplates = templates.filter(t => t.name.toLowerCase().includes(q))
-  const filteredVariants = variants.filter(v => (v.prompt ?? '').toLowerCase().includes(q))
+
+  // Apply both search and active-folder filters to variants
+  const filteredVariants = variants
+    .filter(v => (v.prompt ?? '').toLowerCase().includes(q))
+    .filter(v => activeFolder ? getVariantFolder(v.id) === activeFolder : true)
 
   return (
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
       <TopBar />
 
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar active={activeCategory} onChange={setActiveCategory} />
+        <Sidebar
+          active={activeCategory}
+          onChange={setActiveCategory}
+          activeFolder={activeFolder}
+          onFolderChange={setActiveFolder}
+          folders={folders}
+        />
 
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
@@ -219,14 +235,17 @@ export function LibraryPage() {
                 <h1 className="text-[17px] font-bold text-gray-900 leading-tight tracking-tight">
                   My Library
                   <span className="ml-2 text-gray-300 font-light">·</span>
-                  <span className="ml-2 text-blue-600">{label}</span>
+                  <span className="ml-2 text-blue-600">
+                    {activeFolder
+                      ? (folders.find(f => f.id === activeFolder)?.name ?? 'Folder')
+                      : label}
+                  </span>
                 </h1>
                 <p className="text-[12px] text-gray-400 mt-0.5 font-medium">
                   Manage your creatives and generate AI-powered ad variants
                 </p>
               </div>
 
-              {/* Primary CTA */}
               <DropdownMenu>
                 <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white h-9 px-4 text-sm font-semibold transition-colors shadow-sm shadow-blue-200">
                   {isUploading
@@ -272,7 +291,6 @@ export function LibraryPage() {
             </button>
           </div>
 
-          {/* Upload error */}
           {uploadError && (
             <div className="bg-red-50 border-b border-red-100 px-6 py-2 flex items-center justify-between shrink-0">
               <p className="text-xs text-red-600 font-medium">{uploadError}</p>
@@ -292,37 +310,39 @@ export function LibraryPage() {
             ) : (
               <div className="space-y-10">
 
-                {/* Templates */}
-                <section>
-                  <SectionHeader label="Templates" count={filteredTemplates.length} />
-                  {filteredTemplates.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-200 rounded-2xl text-center bg-white/50">
-                      <div className="h-10 w-10 rounded-xl bg-gray-100 flex items-center justify-center mb-3">
-                        <Upload className="h-5 w-5 text-gray-400" />
+                {/* Templates — hidden when a folder is active */}
+                {!activeFolder && (
+                  <section>
+                    <SectionHeader label="Templates" count={filteredTemplates.length} />
+                    {filteredTemplates.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-200 rounded-2xl text-center bg-white/50">
+                        <div className="h-10 w-10 rounded-xl bg-gray-100 flex items-center justify-center mb-3">
+                          <Upload className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-700 mb-1">No templates yet</p>
+                        <p className="text-xs text-gray-400 mb-4">Upload your first End Card template to get started</p>
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                        >
+                          Upload Template
+                        </button>
                       </div>
-                      <p className="text-sm font-semibold text-gray-700 mb-1">No templates yet</p>
-                      <p className="text-xs text-gray-400 mb-4">Upload your first End Card template to get started</p>
-                      <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
-                      >
-                        Upload Template
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-4">
-                      {filteredTemplates.map(t => (
-                        <MediaCard key={t.id} id={t.id} name={t.name} fileUrl={t.file_url}
-                          fileSizeBytes={t.file_size_bytes} onDelete={handleDeleteTemplate} onGenerate={openGenerateModal} />
-                      ))}
-                    </div>
-                  )}
-                </section>
+                    ) : (
+                      <div className="flex flex-wrap gap-4">
+                        {filteredTemplates.map(t => (
+                          <MediaCard key={t.id} id={t.id} name={t.name} fileUrl={t.file_url}
+                            fileSizeBytes={t.file_size_bytes} onDelete={handleDeleteTemplate} onGenerate={openGenerateModal} />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                )}
 
                 {/* HF Generated Variants */}
                 <section>
                   <SectionHeader
-                    label="HF Generated Variants"
+                    label={activeFolder ? (folders.find(f => f.id === activeFolder)?.name ?? 'Folder') : 'HF Generated Variants'}
                     count={filteredVariants.length}
                     extra={pendingJobIds.length > 0 && (
                       <span className="flex items-center gap-1.5 text-[11px] text-blue-600 font-semibold bg-blue-50 px-2.5 py-1 rounded-full">
@@ -337,8 +357,12 @@ export function LibraryPage() {
                       <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center mb-3">
                         <Sparkles className="h-5 w-5 text-blue-500" />
                       </div>
-                      <p className="text-sm font-semibold text-gray-700 mb-1">No variants generated yet</p>
-                      <p className="text-xs text-gray-400 mb-4">Hover a template card and click Generate Variant</p>
+                      <p className="text-sm font-semibold text-gray-700 mb-1">
+                        {activeFolder ? 'No variants in this folder' : 'No variants generated yet'}
+                      </p>
+                      <p className="text-xs text-gray-400 mb-4">
+                        {activeFolder ? 'Generate a variant and save it here' : 'Hover a template card and click Generate Variant'}
+                      </p>
                       <button
                         onClick={() => openGenerateModal()}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
@@ -350,12 +374,12 @@ export function LibraryPage() {
                     <div className="flex flex-wrap gap-4">
                       {pendingJobIds.map(id => <ShimmerCard key={id} jobId={id} />)}
                       {failedJobs.map(f => (
-                        <div key={f.id} className="w-[196px] rounded-xl border border-red-200 bg-red-50 overflow-hidden">
-                          <div className="flex flex-col items-center justify-center gap-1.5 text-red-300 bg-red-100/60" style={{ aspectRatio: '16/10' }}>
+                        <div key={f.id} className="w-[148px] rounded-xl border border-red-200 bg-red-50 overflow-hidden">
+                          <div className="flex flex-col items-center justify-center gap-1.5 text-red-300 bg-red-100/60" style={{ aspectRatio: '9/16' }}>
                             <span className="text-2xl">✕</span>
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">Render failed</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">Failed</span>
                           </div>
-                          <div className="px-3 py-2 border-t border-red-100">
+                          <div className="px-2.5 py-2 border-t border-red-100">
                             <p className="text-[10px] text-red-500 leading-snug line-clamp-2">{f.error}</p>
                             <button onClick={() => setFailedJobs(p => p.filter(j => j.id !== f.id))}
                               className="text-[10px] text-red-400 hover:text-red-600 mt-1 underline">Dismiss</button>
@@ -369,6 +393,7 @@ export function LibraryPage() {
                           prompt={v.prompt}
                           outputUrl={v.output_url!}
                           onDelete={handleDeleteVariant}
+                          folders={folders}
                         />
                       ))}
                     </div>
@@ -387,8 +412,15 @@ export function LibraryPage() {
       <GenerateModal
         open={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
-        onJobCreated={id => setPendingJobIds(prev => [...prev, id])}
+        onJobsCreated={ids => setPendingJobIds(prev => [...prev, ...ids])}
         selectedTemplate={selectedTemplate}
+      />
+
+      <FolderPickerModal
+        open={showFolderPicker}
+        variantIds={justCompletedIds}
+        onClose={() => { setShowFolderPicker(false); setJustCompletedIds([]) }}
+        onAssigned={updatedFolders => setFolders(updatedFolders)}
       />
     </div>
   )

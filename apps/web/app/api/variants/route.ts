@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import Anthropic from '@anthropic-ai/sdk'
+import { detectLanguages, buildLanguagePrompt } from '@/lib/language-detection'
+
+// Allow up to 60 s so parallel Claude calls don't time out on Vercel Pro/Hobby.
+export const maxDuration = 60
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -91,6 +95,44 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ variants: data })
 }
 
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+async function dispatchToRenderer(
+  jobId: string,
+  htmlContent: string,
+  durationSecs: number,
+  templateFileUrl: string | undefined,
+  supabase: ReturnType<typeof createServiceClient>
+) {
+  const rendererUrl = process.env.RENDERER_SERVICE_URL
+  const rendererSecret = process.env.RENDERER_SECRET
+  if (!rendererUrl) {
+    await supabase.from('render_jobs')
+      .update({ status: 'failed', error_message: 'Renderer not configured' })
+      .eq('id', jobId)
+    return
+  }
+  try {
+    const res = await fetch(`${rendererUrl}/render`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rendererSecret}` },
+      body: JSON.stringify({ jobId, htmlContent, duration: durationSecs, templateUrl: templateFileUrl }),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.status.toString())
+      await supabase.from('render_jobs')
+        .update({ status: 'failed', error_message: `Renderer ${res.status}: ${text}` })
+        .eq('id', jobId)
+    }
+  } catch (err: any) {
+    await supabase.from('render_jobs')
+      .update({ status: 'failed', error_message: 'Renderer unreachable: ' + err.message })
+      .eq('id', jobId)
+  }
+}
+
+// ─── POST ─────────────────────────────────────────────────────────────────────
+
 export async function POST(request: NextRequest) {
   const supabase = createServiceClient()
   const body = await request.json()
@@ -100,21 +142,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
   }
 
-  // Use provided template duration, clamped to a sane range
   const durationSecs = typeof templateDuration === 'number' && templateDuration > 0
     ? Math.min(60, Math.round(templateDuration))
     : 3
 
-  // Create job record
-  const { data: job, error: jobError } = await supabase
-    .from('render_jobs')
-    .insert({ prompt, template_id: templateId || null, status: 'pending' })
-    .select()
-    .single()
-
-  if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 })
-
-  // Get template metadata for context and compositing
+  // ── Fetch template metadata (needed for both single and multi-variant) ──────
   let templateContext = ''
   let templateFileUrl: string | undefined
   if (templateId) {
@@ -129,7 +161,71 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Call Claude to generate HyperFrames HTML
+  // ── Detect multi-language request ──────────────────────────────────────────
+  const languages = detectLanguages(prompt)
+  const isMultiVariant = languages.length >= 2
+
+  if (isMultiVariant) {
+    // ── Multi-variant path: one job per language, parallel Claude calls ──────
+
+    // Build per-language prompts
+    const languagePrompts = languages.map(lang => ({
+      language: lang,
+      prompt: buildLanguagePrompt(prompt, lang, languages),
+    }))
+
+    // Insert all job records in one batch
+    const { data: jobs, error: jobError } = await supabase
+      .from('render_jobs')
+      .insert(languagePrompts.map(lp => ({
+        prompt: lp.prompt,
+        template_id: templateId || null,
+        status: 'pending',
+      })))
+      .select()
+
+    if (jobError || !jobs) {
+      return NextResponse.json({ error: jobError?.message || 'Failed to create jobs' }, { status: 500 })
+    }
+
+    const jobIds = jobs.map(j => j.id)
+
+    // Fan out to Claude + renderer in parallel (fire-and-forget after acknowledging)
+    // We await here so failures are captured within the 60 s window
+    await Promise.all(jobs.map(async (job, i) => {
+      const lp = languagePrompts[i]
+      try {
+        const message = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 8192,
+          system: buildSystemPrompt(durationSecs),
+          messages: [{
+            role: 'user',
+            content: `Generate a HyperFrames end card composition for: ${lp.prompt}${templateContext}`,
+          }],
+        })
+        const html = (message.content[0] as { text: string }).text.trim()
+        await dispatchToRenderer(job.id, html, durationSecs, templateFileUrl, supabase)
+      } catch (err: any) {
+        await supabase.from('render_jobs')
+          .update({ status: 'failed', error_message: err.message })
+          .eq('id', job.id)
+      }
+    }))
+
+    return NextResponse.json({ jobIds })
+  }
+
+  // ── Single-variant path (unchanged logic, returns { jobIds: [id] }) ────────
+
+  const { data: job, error: jobError } = await supabase
+    .from('render_jobs')
+    .insert({ prompt, template_id: templateId || null, status: 'pending' })
+    .select()
+    .single()
+
+  if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 })
+
   let htmlContent: string
   try {
     const message = await anthropic.messages.create({
@@ -138,41 +234,18 @@ export async function POST(request: NextRequest) {
       system: buildSystemPrompt(durationSecs),
       messages: [{
         role: 'user',
-        content: `Generate a HyperFrames end card composition for: ${prompt}${templateContext}`
-      }]
+        content: `Generate a HyperFrames end card composition for: ${prompt}${templateContext}`,
+      }],
     })
     htmlContent = (message.content[0] as { text: string }).text.trim()
   } catch (err: any) {
-    await supabase.from('render_jobs').update({ status: 'failed', error_message: err.message }).eq('id', job.id)
+    await supabase.from('render_jobs')
+      .update({ status: 'failed', error_message: err.message })
+      .eq('id', job.id)
     return NextResponse.json({ error: 'Claude API failed: ' + err.message }, { status: 500 })
   }
 
-  // Fire-and-forget to renderer
-  const rendererUrl = process.env.RENDERER_SERVICE_URL
-  const rendererSecret = process.env.RENDERER_SECRET
+  await dispatchToRenderer(job.id, htmlContent, durationSecs, templateFileUrl, supabase)
 
-  if (!rendererUrl) {
-    await supabase.from('render_jobs').update({ status: 'failed', error_message: 'Renderer not configured' }).eq('id', job.id)
-    return NextResponse.json({ error: 'Renderer service URL not set' }, { status: 500 })
-  }
-
-  try {
-    const rendererRes = await fetch(`${rendererUrl}/render`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rendererSecret}` },
-      body: JSON.stringify({ jobId: job.id, htmlContent, duration: durationSecs, templateUrl: templateFileUrl }),
-    })
-    if (!rendererRes.ok) {
-      const text = await rendererRes.text().catch(() => rendererRes.status.toString())
-      await supabase.from('render_jobs')
-        .update({ status: 'failed', error_message: `Renderer ${rendererRes.status}: ${text}` })
-        .eq('id', job.id)
-    }
-  } catch (err: any) {
-    await supabase.from('render_jobs')
-      .update({ status: 'failed', error_message: 'Renderer unreachable: ' + err.message })
-      .eq('id', job.id)
-  }
-
-  return NextResponse.json({ jobId: job.id })
+  return NextResponse.json({ jobIds: [job.id] })
 }

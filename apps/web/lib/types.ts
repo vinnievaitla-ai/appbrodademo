@@ -1,5 +1,11 @@
 export type Category = 'hook' | 'body' | 'text' | 'audio' | 'end_card'
 
+export interface Folder {
+  id: string
+  name: string
+  createdAt: string
+}
+
 export interface Template {
   id: string
   name: string

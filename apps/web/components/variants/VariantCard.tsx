@@ -1,32 +1,60 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { Download, Trash2, Play, Pause, X, Sparkles, Pencil } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import {
+  Download, Trash2, Play, Pause, X, Sparkles, Pencil,
+  Volume2, VolumeX, Maximize2, Folder,
+} from 'lucide-react'
+import type { Folder as FolderType } from '@/lib/types'
+import { getVariantFolder } from '@/lib/folders'
 
 interface VariantCardProps {
   id: string
   prompt: string
   outputUrl: string
   onDelete: (id: string) => void
+  folders?: FolderType[]
 }
 
-function formatDuration(seconds: number): string {
-  if (!isFinite(seconds) || seconds <= 0) return ''
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `${s}s`
+function formatTime(secs: number): string {
+  if (!isFinite(secs) || secs < 0) return '0:00'
+  const m = Math.floor(secs / 60)
+  const s = Math.floor(secs % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-function VideoModal({ outputUrl, prompt, onClose }: { outputUrl: string; prompt: string; onClose: () => void }) {
-  const [isPlaying, setIsPlaying] = useState(true)
+// ─── Enhanced Video Modal ─────────────────────────────────────────────────────
+
+function VideoModal({
+  outputUrl,
+  prompt,
+  onClose,
+}: {
+  outputUrl: string
+  prompt: string
+  onClose: () => void
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [isMuted, setIsMuted] = useState(false)
+  const [seekValue, setSeekValue] = useState(0)
+  const isDraggingRef = useRef(false)
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     if (!videoRef.current) return
-    videoRef.current.paused ? videoRef.current.play() : videoRef.current.pause()
-  }
+    if (videoRef.current.paused) videoRef.current.play()
+    else videoRef.current.pause()
+  }, [])
 
-  const handleDownload = () => {
+  const toggleMute = useCallback(() => {
+    if (!videoRef.current) return
+    videoRef.current.muted = !videoRef.current.muted
+    setIsMuted(videoRef.current.muted)
+  }, [])
+
+  const handleDownload = useCallback(() => {
     fetch(outputUrl)
       .then(r => r.blob())
       .then(blob => {
@@ -39,78 +67,218 @@ function VideoModal({ outputUrl, prompt, onClose }: { outputUrl: string; prompt:
         URL.revokeObjectURL(a.href)
       })
       .catch(() => window.open(outputUrl, '_blank'))
-  }
+  }, [outputUrl])
+
+  const handleFullscreen = useCallback(() => {
+    videoRef.current?.requestFullscreen?.()
+  }, [])
+
+  // Close on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="relative flex flex-col items-center gap-3 max-h-[95vh]" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-black rounded-2xl overflow-hidden group/modal"
+        style={{ height: 'min(85vh, 580px)', aspectRatio: '9/16' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Close */}
         <button
           onClick={onClose}
-          className="absolute -top-2 -right-2 z-10 h-7 w-7 rounded-full bg-white/10 hover:bg-white/25 flex items-center justify-center transition-colors"
+          className="absolute top-2.5 right-2.5 z-20 h-7 w-7 rounded-full bg-black/50 hover:bg-black/80 flex items-center justify-center transition-colors"
         >
           <X className="h-3.5 w-3.5 text-white" />
         </button>
 
-        <div className="relative" style={{ height: 'min(75vh, 540px)', aspectRatio: '9/16' }}>
-          <video
-            ref={videoRef}
-            src={outputUrl}
-            autoPlay
-            loop
-            playsInline
-            className="h-full w-full rounded-xl object-contain bg-black"
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-          />
-          <button
-            onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-xl"
-          >
-            <div className="h-12 w-12 rounded-full bg-black/50 flex items-center justify-center">
-              {isPlaying
-                ? <Pause className="h-5 w-5 text-white" fill="white" />
-                : <Play className="h-5 w-5 text-white ml-0.5" fill="white" />}
-            </div>
-          </button>
+        {/* Prompt chip */}
+        <div className="absolute top-2.5 left-2.5 right-10 z-20 pointer-events-none">
+          <span className="text-[10px] text-white/60 bg-black/40 px-2 py-0.5 rounded-md truncate block">
+            {prompt}
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-white/60 text-xs truncate max-w-[200px]">{prompt}</span>
-          <button
-            onClick={handleDownload}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-900 text-xs font-semibold rounded-lg hover:bg-gray-100 transition-colors"
+        {/* Video — fills the container, click to toggle play */}
+        <video
+          ref={videoRef}
+          src={outputUrl}
+          className="absolute inset-0 w-full h-full object-contain cursor-pointer"
+          playsInline
+          autoPlay
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onLoadedMetadata={() => {
+            setDuration(videoRef.current?.duration ?? 0)
+            setIsPlaying(true)
+          }}
+          onTimeUpdate={() => {
+            if (!isDraggingRef.current) {
+              const t = videoRef.current?.currentTime ?? 0
+              setCurrentTime(t)
+              setSeekValue(t)
+            }
+          }}
+          onEnded={() => {
+            setIsPlaying(false)
+            setCurrentTime(0)
+            setSeekValue(0)
+          }}
+          onClick={togglePlay}
+        />
+
+        {/* Centre play/pause flash (only visible when paused) */}
+        {!isPlaying && (
+          <div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+            onClick={togglePlay}
           >
-            <Download className="h-3.5 w-3.5" />
-            Download
-          </button>
+            <div className="h-14 w-14 rounded-full bg-black/50 flex items-center justify-center">
+              <Play className="h-6 w-6 text-white ml-1" fill="white" />
+            </div>
+          </div>
+        )}
+
+        {/* Controls bar — always visible, transitions out on hover-away */}
+        <div className="absolute inset-x-0 bottom-0 z-20 flex flex-col gap-1.5 px-3 pb-3 pt-10
+                        bg-gradient-to-t from-black/80 via-black/40 to-transparent rounded-b-2xl">
+
+          {/* Seek bar */}
+          <div className="relative w-full h-3 flex items-center">
+            {/* Track background */}
+            <div className="absolute inset-x-0 h-1 bg-white/20 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-white rounded-full"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            {/* Invisible but interactive range input */}
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              step={0.05}
+              value={seekValue}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+              onMouseDown={() => { isDraggingRef.current = true }}
+              onChange={e => {
+                const v = parseFloat(e.target.value)
+                setSeekValue(v)
+                setCurrentTime(v)
+              }}
+              onMouseUp={e => {
+                const v = parseFloat((e.target as HTMLInputElement).value)
+                if (videoRef.current) videoRef.current.currentTime = v
+                isDraggingRef.current = false
+              }}
+              onTouchEnd={e => {
+                isDraggingRef.current = false
+                const v = parseFloat((e.target as HTMLInputElement).value)
+                if (videoRef.current) videoRef.current.currentTime = v
+              }}
+            />
+          </div>
+
+          {/* Control row */}
+          <div className="flex items-center gap-2.5">
+            {/* Play / Pause */}
+            <button
+              onClick={togglePlay}
+              className="text-white hover:text-white/80 transition-colors flex-shrink-0"
+            >
+              {isPlaying
+                ? <Pause className="h-4 w-4" fill="white" />
+                : <Play className="h-4 w-4 ml-0.5" fill="white" />
+              }
+            </button>
+
+            {/* Time */}
+            <span className="text-[11px] text-white/70 tabular-nums flex-shrink-0">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+
+            <div className="flex-1" />
+
+            {/* Volume */}
+            <button
+              onClick={toggleMute}
+              className="text-white hover:text-white/80 transition-colors flex-shrink-0"
+              title={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted
+                ? <VolumeX className="h-3.5 w-3.5" />
+                : <Volume2 className="h-3.5 w-3.5" />
+              }
+            </button>
+
+            {/* Download */}
+            <button
+              onClick={handleDownload}
+              className="text-white hover:text-white/80 transition-colors flex-shrink-0"
+              title="Download"
+            >
+              <Download className="h-3.5 w-3.5" />
+            </button>
+
+            {/* Fullscreen */}
+            <button
+              onClick={handleFullscreen}
+              className="text-white hover:text-white/80 transition-colors flex-shrink-0"
+              title="Fullscreen"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-const STORAGE_KEY = (id: string) => `variant-name-${id}`
+// ─── VariantCard ──────────────────────────────────────────────────────────────
 
-export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProps) {
+const NAME_KEY = (id: string) => `variant-name-${id}`
+
+export function VariantCard({ id, prompt, outputUrl, onDelete, folders = [] }: VariantCardProps) {
   const [showModal, setShowModal] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [duration, setDuration] = useState<number | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [name, setName] = useState('')
   const [isEditingName, setIsEditingName] = useState(false)
+  const [folderName, setFolderName] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY(id))
+    const stored = localStorage.getItem(NAME_KEY(id))
     if (stored) setName(stored)
   }, [id])
+
+  // Resolve folder name for badge
+  useEffect(() => {
+    const fid = getVariantFolder(id)
+    if (fid && folders.length > 0) {
+      const folder = folders.find(f => f.id === fid)
+      setFolderName(folder?.name ?? null)
+    } else {
+      setFolderName(null)
+    }
+  }, [id, folders])
 
   const saveName = (val: string) => {
     const trimmed = val.trim()
     setName(trimmed)
-    if (trimmed) localStorage.setItem(STORAGE_KEY(id), trimmed)
-    else localStorage.removeItem(STORAGE_KEY(id))
+    if (trimmed) localStorage.setItem(NAME_KEY(id), trimmed)
+    else localStorage.removeItem(NAME_KEY(id))
     setIsEditingName(false)
   }
 
@@ -154,7 +322,7 @@ export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProp
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Thumbnail — portrait 9:16 */}
+        {/* Thumbnail */}
         <div className="relative overflow-hidden bg-gray-950 flex-shrink-0" style={{ aspectRatio: '9/16' }}>
           <video
             ref={videoRef}
@@ -169,16 +337,20 @@ export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProp
           {/* Bottom gradient */}
           <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
 
-          {/* HF badge — top left */}
+          {/* HF badge */}
           <div className="absolute top-2 left-2 flex items-center gap-1 bg-blue-600/90 backdrop-blur-sm rounded-full px-1.5 py-0.5">
             <Sparkles className="h-2.5 w-2.5 text-white" />
             <span className="text-[9px] font-semibold text-white uppercase tracking-wide">HF</span>
           </div>
 
-          {/* Duration badge — top right */}
+          {/* Duration badge */}
           {duration !== null && (
             <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm rounded-md px-1.5 py-0.5">
-              <span className="text-[10px] font-semibold text-white tabular-nums">{formatDuration(duration)}</span>
+              <span className="text-[10px] font-semibold text-white tabular-nums">
+                {Math.floor(duration / 60) > 0
+                  ? `${Math.floor(duration / 60)}:${Math.floor(duration % 60).toString().padStart(2, '0')}`
+                  : `${Math.floor(duration)}s`}
+              </span>
             </div>
           )}
 
@@ -194,7 +366,8 @@ export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProp
         </div>
 
         {/* Footer */}
-        <div className="px-2.5 py-2 flex flex-col gap-2">
+        <div className="px-2.5 py-2 flex flex-col gap-1.5">
+
           {/* Name (editable) */}
           {isEditingName ? (
             <input
@@ -214,11 +387,10 @@ export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProp
               onClick={() => setIsEditingName(true)}
               className="group/name flex items-center gap-1 text-left w-full"
             >
-              {name ? (
-                <span className="text-[11px] font-medium text-gray-900 leading-snug truncate">{name}</span>
-              ) : (
-                <span className="text-[11px] text-gray-400 leading-snug">Add a name…</span>
-              )}
+              {name
+                ? <span className="text-[11px] font-medium text-gray-900 leading-snug truncate">{name}</span>
+                : <span className="text-[11px] text-gray-400 leading-snug">Add a name…</span>
+              }
               <Pencil className="h-2.5 w-2.5 text-gray-300 group-hover/name:text-gray-500 shrink-0 transition-colors" />
             </button>
           )}
@@ -226,8 +398,16 @@ export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProp
           {/* Prompt */}
           <p className="text-[11px] text-gray-500 leading-snug line-clamp-2">{label}</p>
 
+          {/* Folder badge */}
+          {folderName && (
+            <div className="flex items-center gap-1">
+              <Folder className="h-2.5 w-2.5 text-blue-400 shrink-0" />
+              <span className="text-[10px] text-blue-500 font-medium truncate">{folderName}</span>
+            </div>
+          )}
+
           {/* Action buttons */}
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 mt-0.5">
             <button
               onClick={handleDownload}
               className="flex-1 flex items-center justify-center gap-1 h-7 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 text-[11px] font-medium text-gray-600 hover:text-gray-800 transition-colors"
