@@ -41,8 +41,7 @@ export function buildLanguagePrompt(
   let result = original
   for (const lang of allLanguages) {
     if (lang === target) continue
-    // Remove patterns: ", Lang", " and Lang", " or Lang", "Lang, ", "Lang and "
-    const l = lang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // escape
+    const l = lang.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     result = result
       .replace(new RegExp(`\\s*,\\s*${l}`, 'gi'), '')
       .replace(new RegExp(`\\s+(?:and|or)\\s+${l}`, 'gi'), '')
@@ -50,6 +49,16 @@ export function buildLanguagePrompt(
       .replace(new RegExp(`${l}\\s+(?:and|or)\\s+`, 'gi'), '')
       .replace(new RegExp(`\\b${l}\\b`, 'gi'), '')
   }
-  // Clean up double spaces, orphaned punctuation
-  return result.replace(/\s+/g, ' ').replace(/\s*,\s*$/, '').trim()
+  // Collapse "in N languages -" / "in multiple languages -" so Claude doesn't
+  // see "3 languages" and try to generate a multi-language composition.
+  result = result
+    .replace(/\bin\s+\d+\s+languages?\s*[-–,]?\s*/gi, 'in ')
+    .replace(/\bin\s+multiple\s+languages?\s*[-–,]?\s*/gi, 'in ')
+  // Clean up artifacts
+  result = result
+    .replace(/\s+/g, ' ')
+    .replace(/[\s,.-]+$/, '')
+    .trim()
+  // Explicit directive so Claude uses only this language and nothing else
+  return `${result}. Use ${target} only for all text — do not include any other language.`
 }
