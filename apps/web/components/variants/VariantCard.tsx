@@ -14,6 +14,14 @@ interface VariantCardProps {
   outputUrl: string
   onDelete: (id: string) => void
   folders?: FolderType[]
+  /** workspace multi-select mode */
+  selectable?: boolean
+  selected?: boolean
+  onSelect?: () => void
+  /** whether this card is highlighted in the details panel */
+  highlighted?: boolean
+  /** fires when the card body is clicked (for details panel) */
+  onCardClick?: () => void
 }
 
 function formatTime(secs: number): string {
@@ -247,7 +255,10 @@ function VideoModal({
 
 const NAME_KEY = (id: string) => `variant-name-${id}`
 
-export function VariantCard({ id, prompt, outputUrl, onDelete, folders = [] }: VariantCardProps) {
+export function VariantCard({
+  id, prompt, outputUrl, onDelete, folders = [],
+  selectable = false, selected = false, onSelect, highlighted = false, onCardClick,
+}: VariantCardProps) {
   const [showModal, setShowModal] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [duration, setDuration] = useState<number | null>(null)
@@ -318,9 +329,16 @@ export function VariantCard({ id, prompt, outputUrl, onDelete, folders = [] }: V
   return (
     <>
       <div
-        className="group w-[148px] rounded-xl border border-gray-200 bg-white overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-default flex flex-col"
+        className={`group w-[148px] rounded-xl border bg-white overflow-hidden transition-all duration-200 cursor-default flex flex-col
+          ${highlighted
+            ? 'border-blue-400 shadow-md shadow-blue-100'
+            : selected
+            ? 'border-blue-300 shadow-sm'
+            : 'border-gray-200 hover:shadow-lg hover:-translate-y-0.5'
+          }`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        onClick={onCardClick}
       >
         {/* Thumbnail */}
         <div className="relative overflow-hidden bg-gray-950 flex-shrink-0" style={{ aspectRatio: '9/16' }}>
@@ -337,8 +355,26 @@ export function VariantCard({ id, prompt, outputUrl, onDelete, folders = [] }: V
           {/* Bottom gradient */}
           <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
 
+          {/* Checkbox (selectable mode) */}
+          {selectable && (
+            <button
+              onClick={e => { e.stopPropagation(); onSelect?.() }}
+              className={`absolute top-2 left-2 z-10 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                selected
+                  ? 'bg-blue-600 border-blue-600'
+                  : 'bg-white/80 border-gray-300 hover:border-blue-400'
+              }`}
+            >
+              {selected && (
+                <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </button>
+          )}
+
           {/* HF badge */}
-          <div className="absolute top-2 left-2 flex items-center gap-1 bg-blue-600/90 backdrop-blur-sm rounded-full px-1.5 py-0.5">
+          <div className={`absolute ${selectable ? 'top-2 left-9' : 'top-2 left-2'} flex items-center gap-1 bg-blue-600/90 backdrop-blur-sm rounded-full px-1.5 py-0.5`}>
             <Sparkles className="h-2.5 w-2.5 text-white" />
             <span className="text-[9px] font-semibold text-white uppercase tracking-wide">HF</span>
           </div>

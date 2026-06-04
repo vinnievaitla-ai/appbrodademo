@@ -1,11 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { Anchor, User, Type, AudioWaveform, LayoutTemplate, FolderOpen, Folder, FolderPlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import {
+  Anchor, User, Type, AudioWaveform, LayoutTemplate,
+  FolderOpen, Folder, FolderPlus, LayoutGrid, Clock,
+  ChevronDown, ChevronRight, Pencil, Trash2,
+} from 'lucide-react'
 import type { Folder as FolderType } from '@/lib/types'
-import { renameFolder, deleteFolder, getFolders } from '@/lib/folders'
+import { renameFolder as renameFolderStore, deleteFolder as deleteFolderStore, getFolders } from '@/lib/folders'
 
-const NAV_ITEMS = [
+export type ViewState =
+  | { type: 'templates'; category: string }
+  | { type: 'folder-grid' }
+  | { type: 'folder-workspace'; folderId: string | 'untagged' }
+
+const LIBRARY_ITEMS = [
   { id: 'hook',     label: 'Hook',     Icon: Anchor },
   { id: 'body',     label: 'Body',     Icon: User },
   { id: 'text',     label: 'Text',     Icon: Type },
@@ -14,94 +23,148 @@ const NAV_ITEMS = [
 ]
 
 interface SidebarProps {
-  active: string
-  onChange: (id: string) => void
-  activeFolder: string | null
-  onFolderChange: (id: string | null) => void
+  view: ViewState
+  onViewChange: (v: ViewState) => void
   folders: FolderType[]
+  onFoldersChange: (f: FolderType[]) => void
+  onNewFolder: () => void
+  variantCounts: Record<string, number>   // folderId → count; 'untagged' → count
 }
 
-export function Sidebar({ active, onChange, activeFolder, onFolderChange, folders }: SidebarProps) {
+function SectionLabel({ label, action }: { label: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between px-4 pt-4 pb-1.5">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
+      {action}
+    </div>
+  )
+}
+
+function NavBtn({
+  active, onClick, Icon, label, count, dimmed,
+}: {
+  active: boolean; onClick: () => void; Icon: React.FC<any>
+  label: string; count?: number; dimmed?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        group flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] transition-all duration-150 text-left
+        ${active
+          ? 'bg-blue-50 text-blue-700 font-semibold'
+          : dimmed
+          ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-600 font-medium'
+          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
+        }
+      `}
+    >
+      <Icon className={`h-3.5 w-3.5 shrink-0 transition-colors ${
+        active ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
+      }`} />
+      <span className="flex-1 truncate">{label}</span>
+      {count !== undefined && count > 0 && (
+        <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 ${
+          active ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
+        }`}>
+          {count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+export function Sidebar({
+  view, onViewChange, folders, onFoldersChange, onNewFolder, variantCounts,
+}: SidebarProps) {
+  const [foldersOpen, setFoldersOpen] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
-  const handleRename = (id: string, currentName: string) => {
-    setEditingId(id)
-    setEditName(currentName)
-  }
+  const activeCategory = view.type === 'templates' ? view.category : null
+  const activeFolderId = view.type === 'folder-workspace' ? view.folderId : null
 
   const commitRename = (id: string) => {
-    const trimmed = editName.trim()
-    if (trimmed) renameFolder(id, trimmed)
+    const t = editName.trim()
+    if (t) { renameFolderStore(id, t); onFoldersChange(getFolders()) }
     setEditingId(null)
-    setEditName('')
   }
 
   const handleDelete = (id: string) => {
-    deleteFolder(id)
-    if (activeFolder === id) onFolderChange(null)
+    deleteFolderStore(id)
+    if (activeFolderId === id) onViewChange({ type: 'folder-grid' })
+    onFoldersChange(getFolders())
   }
 
   return (
-    <aside className="w-[168px] shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
-      {/* Library section */}
-      <div className="px-4 pt-4 pb-2">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Library</p>
-      </div>
+    <aside className="w-[200px] shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
 
-      <nav className="px-2 py-1 space-y-0.5">
-        {NAV_ITEMS.map(({ id, label, Icon }) => {
-          const isActive = active === id && !activeFolder
-          return (
-            <button
-              key={id}
-              onClick={() => { onChange(id); onFolderChange(null) }}
-              className={`
-                group flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm transition-all duration-150
-                ${isActive
-                  ? 'bg-blue-50 text-blue-700 font-semibold'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 font-medium'
-                }
-              `}
-            >
-              <Icon className={`h-[15px] w-[15px] shrink-0 transition-colors ${isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
-              {label}
-              {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-500" />}
-            </button>
-          )
-        })}
+      {/* ── LIBRARY ─────────────────────────────────────── */}
+      <SectionLabel label="Library" />
+      <nav className="px-2 space-y-0.5">
+        {LIBRARY_ITEMS.map(({ id, label, Icon }) => (
+          <NavBtn
+            key={id}
+            active={activeCategory === id}
+            onClick={() => onViewChange({ type: 'templates', category: id })}
+            Icon={Icon}
+            label={label}
+          />
+        ))}
       </nav>
 
       {/* Divider */}
-      <div className="mx-3 my-2 h-px bg-gray-100" />
+      <div className="mx-4 my-3 h-px bg-gray-100" />
 
-      {/* Folders section */}
-      <div className="px-4 pb-1">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Folders</p>
+      {/* ── GENERATED CONTENT ───────────────────────────── */}
+      <SectionLabel label="Generated" />
+      <nav className="px-2 space-y-0.5">
+        <NavBtn
+          active={view.type === 'folder-grid'}
+          onClick={() => onViewChange({ type: 'folder-grid' })}
+          Icon={LayoutGrid}
+          label="All Variants"
+        />
+        <NavBtn
+          active={false}
+          onClick={() => {}}
+          Icon={Clock}
+          label="Recent"
+          dimmed
+        />
+      </nav>
+
+      {/* Divider */}
+      <div className="mx-4 my-3 h-px bg-gray-100" />
+
+      {/* ── FOLDERS ─────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 pt-1 pb-1.5">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Folders</p>
+        <button
+          onClick={() => setFoldersOpen(o => !o)}
+          className="text-gray-300 hover:text-gray-500 transition-colors"
+        >
+          {foldersOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        </button>
       </div>
 
-      <nav className="flex-1 px-2 py-1 space-y-0.5 overflow-y-auto">
-        {/* All Variants */}
-        <button
-          onClick={() => onFolderChange(null)}
-          className={`
-            group flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm transition-all duration-150
-            ${activeFolder === null
-              ? 'bg-blue-50 text-blue-700 font-semibold'
-              : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 font-medium'
-            }
-          `}
-        >
-          <FolderOpen className={`h-[15px] w-[15px] shrink-0 ${activeFolder === null ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
-          All Variants
-          {activeFolder === null && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-500" />}
-        </button>
+      {foldersOpen && (
+        <nav className="flex-1 px-2 overflow-y-auto space-y-0.5 pb-2">
 
-        {/* Individual folders */}
-        {folders.map(folder => {
-          const isActive = activeFolder === folder.id
-          return (
+          {/* Untagged pseudo-folder */}
+          {(variantCounts['untagged'] ?? 0) > 0 && (
+            <NavBtn
+              active={activeFolderId === 'untagged'}
+              onClick={() => onViewChange({ type: 'folder-workspace', folderId: 'untagged' })}
+              Icon={Folder}
+              label="Untagged"
+              count={variantCounts['untagged']}
+            />
+          )}
+
+          {/* Named folders */}
+          {folders.map(folder => (
             <div
               key={folder.id}
               className="relative"
@@ -116,32 +179,25 @@ export function Sidebar({ active, onChange, activeFolder, onFolderChange, folder
                   onBlur={() => commitRename(folder.id)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') commitRename(folder.id)
-                    if (e.key === 'Escape') { setEditingId(null); setEditName('') }
+                    if (e.key === 'Escape') setEditingId(null)
                   }}
-                  className="w-full px-3 py-2 text-sm rounded-md border border-blue-300 bg-blue-50 text-blue-800 outline-none"
+                  className="w-full px-3 py-2 text-[13px] rounded-lg border border-blue-300 bg-blue-50 text-blue-800 outline-none"
                 />
               ) : (
-                <button
-                  onClick={() => onFolderChange(folder.id)}
-                  className={`
-                    group flex items-center gap-2.5 w-full px-3 py-2 rounded-md text-sm transition-all duration-150
-                    ${isActive
-                      ? 'bg-blue-50 text-blue-700 font-semibold'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800 font-medium'
-                    }
-                  `}
-                >
-                  <Folder className={`h-[15px] w-[15px] shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
-                  <span className="truncate flex-1 text-left">{folder.name}</span>
-                  {isActive && !hoveredId && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-blue-500" />}
-                </button>
+                <NavBtn
+                  active={activeFolderId === folder.id}
+                  onClick={() => onViewChange({ type: 'folder-workspace', folderId: folder.id })}
+                  Icon={Folder}
+                  label={folder.name}
+                  count={variantCounts[folder.id]}
+                />
               )}
 
-              {/* Hover actions */}
+              {/* Hover edit/delete actions */}
               {hoveredId === folder.id && editingId !== folder.id && (
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white rounded-md shadow-sm border border-gray-100 px-0.5 py-0.5 z-10">
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white rounded-lg border border-gray-100 shadow-sm px-0.5 py-0.5 z-10">
                   <button
-                    onClick={e => { e.stopPropagation(); handleRename(folder.id, folder.name) }}
+                    onClick={e => { e.stopPropagation(); setEditingId(folder.id); setEditName(folder.name) }}
                     className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                     title="Rename"
                   >
@@ -157,15 +213,24 @@ export function Sidebar({ active, onChange, activeFolder, onFolderChange, folder
                 </div>
               )}
             </div>
-          )
-        })}
-      </nav>
+          ))}
 
-      {/* User / workspace */}
-      <div className="p-3 border-t border-gray-100 mt-auto shrink-0">
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-50">
+          {/* New Folder */}
+          <button
+            onClick={onNewFolder}
+            className="flex items-center gap-2 w-full px-3 py-2 text-[13px] text-gray-400 hover:text-blue-600 hover:bg-blue-50/60 rounded-lg transition-colors font-medium"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+            New Folder
+          </button>
+        </nav>
+      )}
+
+      {/* User chip */}
+      <div className="p-3 border-t border-gray-100 shrink-0">
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-50">
           <div className="h-5 w-5 rounded-full bg-gradient-to-br from-orange-400 to-red-500 shrink-0" />
-          <span className="text-xs font-medium text-gray-600 truncate">UI_UX_Workspace</span>
+          <span className="text-[12px] font-medium text-gray-600 truncate">UI_UX_Workspace</span>
         </div>
       </div>
     </aside>
