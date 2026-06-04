@@ -48,12 +48,15 @@ router.post('/render', (req: Request, res: Response) => {
       try {
         const indexPath = path.join('/app/tmp', jobId, 'index.html')
         const raw = fs.readFileSync(indexPath, 'utf-8')
-        // Extract up to 400 chars around the first data-composition-id occurrence.
-        const idx = raw.indexOf('data-composition-id')
+        // Strip script blocks first so we don't land inside the injected TIMELINE_STUB_SCRIPT
+        // (which contains the string [data-composition-id] as a CSS selector).
+        const rawNoScript = raw.replace(/<script[\s\S]*?<\/script>/gi, '')
+        // Search for data-composition-id= (with =) to find the actual HTML attribute.
+        const idx = rawNoScript.indexOf('data-composition-id=')
         if (idx === -1) {
           htmlDebug = '\n[HTML debug] data-composition-id NOT FOUND in sanitized HTML'
         } else {
-          const snippet = raw.substring(Math.max(0, idx - 60), idx + 340)
+          const snippet = rawNoScript.substring(Math.max(0, idx - 60), idx + 340)
           htmlDebug = '\n[HTML debug] ...around composition root:\n' + snippet
         }
       } catch { /* file may not exist if hyperframes never wrote it */ }

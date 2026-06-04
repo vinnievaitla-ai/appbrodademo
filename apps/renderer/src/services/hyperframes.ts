@@ -75,39 +75,50 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
   let found = false
 
   // Fix 1 & 3 – root gets data-duration; extra data-composition-id stripped from children.
-  // 'body' included so <body data-composition-id="variant"> works too.
+  // Match ANY opening tag that carries data-composition-id (div, section, html, custom elements…).
+  // The regex captures (tagName)(everything-before-closing->), so we can rebuild the tag safely
+  // without relying on a fixed allowlist or a fragile `match.replace('>', …)`.
   html = html.replace(
-    /(<(?:div|section|article|main|span|body)(\s[^>]*)?>)/g,
-    (match, _full, attrs = '') => {
-      if (!attrs.includes('data-composition-id')) return match
-
+    /<(\w[\w-]*)(\s[^>]*?data-composition-id\s*=\s*["'][^"']*["'][^>]*?)>/g,
+    (match, tag, attrs) => {
       if (!found) {
         found = true
-        // Always overwrite data-duration so it matches the intended composition length
-        // regardless of what Claude generated (e.g. it may copy the 3 s template example).
-        if (attrs.includes('data-duration')) {
-          return match.replace(/data-duration="[^"]*"/, `data-duration="${defaultDuration}"`)
+        // Always overwrite data-duration to the intended composition length.
+        if (/data-duration\s*=\s*["']/.test(attrs)) {
+          const newAttrs = attrs.replace(/data-duration\s*=\s*["'][^"']*["']/, `data-duration="${defaultDuration}"`)
+          return `<${tag}${newAttrs}>`
         }
-        return match.replace('>', ` data-duration="${defaultDuration}">`)
+        return `<${tag}${attrs} data-duration="${defaultDuration}">`
       }
-
-      return match.replace(/\s*data-composition-id="[^"]*"/, '')
+      // Strip data-composition-id from child elements (they become sub-compositions).
+      const newAttrs = attrs.replace(/\s*data-composition-id\s*=\s*["'][^"']*["']/, '')
+      return `<${tag}${newAttrs}>`
     }
   )
 
-  // Belt-and-suspenders: if data-composition-id is on a tag NOT matched above (e.g. <html>,
-  // a custom element, or a tag whose attributes span multiple lines in a way the regex
-  // skipped), inject data-duration directly after the attribute value.
+  // Belt-and-suspenders: catch any remaining data-composition-id= not handled above.
   // With --fps 15 HyperFrames reads data-duration synchronously before DOMContentLoaded,
   // so it MUST be present in the serialised HTML, not set at runtime.
-  if (!found && html.includes('data-composition-id=')) {
-    // Overwrite existing data-duration if present, otherwise inject it.
-    if (/data-composition-id="[^"]*"[^>]*data-duration|data-duration[^>]*data-composition-id/.test(html)) {
-      html = html.replace(/data-duration="[^"]*"/, `data-duration="${defaultDuration}"`)
+  if (!found && /data-composition-id\s*=\s*["']/.test(html)) {
+    if (/data-duration\s*=\s*["']/.test(html)) {
+      html = html.replace(/data-duration\s*=\s*["'][^"']*["']/, `data-duration="${defaultDuration}"`)
     } else {
-      html = html.replace(/(data-composition-id="[^"]*")/, `$1 data-duration="${defaultDuration}"`)
+      html = html.replace(/(data-composition-id\s*=\s*["'][^"']*["'])/, `$1 data-duration="${defaultDuration}"`)
     }
     found = true
+  }
+
+  // Last-resort: Claude omitted data-composition-id entirely (e.g. generated plain HTML without
+  // the required root attributes). Wrap the <body> content in a proper composition root so
+  // HyperFrames can find the duration instead of reporting zero and aborting.
+  if (!found) {
+    const compositionRoot = `<div id="stage" data-composition-id="variant" data-width="1080" data-height="1920" data-start="0" data-duration="${defaultDuration}" style="width:1080px;height:1920px;overflow:hidden;position:relative;margin:0;padding:0;">`
+    if (/<body[^>]*>/i.test(html)) {
+      html = html.replace(/(<body[^>]*>)/i, `$1${compositionRoot}`)
+      html = html.replace(/<\/body>/i, `</div></body>`)
+    } else {
+      html = compositionRoot + html + '</div>'
+    }
   }
 
   // Fix 2 – inject timeline stub into <head>

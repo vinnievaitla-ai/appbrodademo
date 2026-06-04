@@ -42,7 +42,9 @@ COMPOSITION RULES
    Avoid CSS filter (blur/drop-shadow filter) — it requires expensive per-frame render passes.
    Include all CSS inside a <style> block in <head>.
 
-6. No external media (no <img src=>, no <video>) unless a URL is explicitly provided.
+6. NEVER include <video>, <audio>, or <img> elements. The template video is composited as a
+   separate layer in post — your HTML is the overlay only. Even if a video URL is provided for
+   context, do NOT embed it as a <video> element.
 
 ════════════════════════════════════════
 FONTS — CRITICAL
@@ -106,7 +108,7 @@ export async function POST(request: NextRequest) {
       .eq('id', templateId)
       .single()
     if (template) {
-      templateContext = `\n\nBase template: "${template.name}" (${template.file_url})\nThe template video is ${durationSecs} seconds long — your composition must match this exact duration.`
+      templateContext = `\n\nBase template: "${template.name}" — duration ${durationSecs} seconds.\nDo NOT include the video as a <video> element. Your HTML is the overlay layer only; the template video is composited separately. Match the ${durationSecs} s duration exactly.`
     }
   }
 
