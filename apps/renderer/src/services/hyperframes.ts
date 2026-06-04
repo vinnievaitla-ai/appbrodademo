@@ -49,7 +49,9 @@ export function renderComposition(htmlContent: string, jobId: string): string {
   fs.mkdirSync(jobDir, { recursive: true })
   fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent), 'utf-8')
 
-  execSync(`npx hyperframes render ${jobDir} -o ${outputPath}`, {
+  // --workers 1: single Chrome instance — parallel workers (default in 0.6.x) cause OOM in
+  // Railway's constrained Docker container because each worker spawns its own Chrome process.
+  execSync(`npx hyperframes render ${jobDir} -o ${outputPath} --workers 1`, {
     timeout: 300_000,
     stdio: 'pipe',
   })
