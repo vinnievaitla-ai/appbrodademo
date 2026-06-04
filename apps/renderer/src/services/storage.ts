@@ -13,14 +13,27 @@ export async function uploadGeneratedVariant(filePath: string, jobId: string): P
   const fileName = `${jobId}.mp4`
   const buffer = fs.readFileSync(filePath)
 
-  const { error } = await supabase.storage
-    .from('generated-variants')
-    .upload(fileName, buffer, { contentType: 'video/mp4', upsert: false })
+  // Retry once on transient network failures (fetch failed, connection reset)
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const { error } = await supabase.storage
+      .from('generated-variants')
+      .upload(fileName, buffer, { contentType: 'video/mp4', upsert: true })
 
-  if (error) throw new Error(`Storage upload failed: ${error.message}`)
+    if (!error) {
+      const { data } = supabase.storage.from('generated-variants').getPublicUrl(fileName)
+      return data.publicUrl
+    }
 
-  const { data } = supabase.storage.from('generated-variants').getPublicUrl(fileName)
-  return data.publicUrl
+    if (attempt === 1) {
+      console.warn(`Upload attempt 1 failed (${error.message}), retrying in 3 s…`)
+      await new Promise(r => setTimeout(r, 3000))
+    } else {
+      throw new Error(`Storage upload failed: ${error.message}`)
+    }
+  }
+
+  // TypeScript requires a return — unreachable
+  throw new Error('Storage upload failed: exhausted retries')
 }
 
 export async function updateJobStatus(

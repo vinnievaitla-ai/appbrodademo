@@ -6,6 +6,37 @@ import { uploadGeneratedVariant, updateJobStatus } from '../services/storage'
 
 const router = Router()
 
+// ─── Concurrency queue ────────────────────────────────────────────────────────
+// The container has ~512 MB RAM. Running multiple Chrome + FFmpeg processes in
+// parallel causes OOM kills and Supabase upload failures (fetch failed).
+// Limit to 1 active render at a time; all others wait in the FIFO queue.
+
+let activeRenders = 0
+const MAX_CONCURRENT = 1
+const renderQueue: Array<() => void> = []
+
+function drainQueue() {
+  if (renderQueue.length === 0 || activeRenders >= MAX_CONCURRENT) return
+  const next = renderQueue.shift()!
+  next()
+}
+
+function enqueueRender(fn: () => Promise<void>) {
+  const run = () => {
+    activeRenders++
+    fn().finally(() => {
+      activeRenders--
+      drainQueue()
+    })
+  }
+  if (activeRenders < MAX_CONCURRENT) {
+    run()
+  } else {
+    console.log(`[queue] ${renderQueue.length + 1} jobs waiting (1 active)`)
+    renderQueue.push(run)
+  }
+}
+
 router.post('/render', (req: Request, res: Response) => {
   const auth = req.headers.authorization
   if (auth !== `Bearer ${process.env.RENDERER_SECRET}`) {
@@ -28,8 +59,8 @@ router.post('/render', (req: Request, res: Response) => {
   // Acknowledge immediately — rendering happens async
   res.json({ status: 'accepted', jobId })
 
-  // Process after response is flushed
-  setImmediate(async () => {
+  // Enqueue — at most 1 render runs at a time; others wait
+  enqueueRender(async () => {
     try {
       await updateJobStatus(jobId, { status: 'processing' })
 
