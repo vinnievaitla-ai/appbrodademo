@@ -27,11 +27,18 @@ const TMP_DIR = path.join(process.cwd(), 'tmp')
 // DOMContentLoaded handler. A DOMContentLoaded-based registration races with the
 // runtime and loses — window.__timelines appears empty. Synchronous <head> execution
 // guarantees the stubs are visible before the runtime ever inspects the registry.
+//
+// 4. data-duration must equal the actual CSS animation span.
+//    If data-duration > max(animation-delay + animation-duration), HyperFrames seeks
+//    past the last keyframe. This causes the streaming encode to receive fewer frames
+//    than expected, leaving x264's lookahead buffer unflushed → size=0kB output.
+//    Fix: our DOMContentLoaded (fires before the runtime's) reads getAnimations() on
+//    every element and sets data-duration to the real animation span.
 const TIMELINE_STUB_SCRIPT = `<script>
 (function () {
   window.__timelines = window.__timelines || {};
   function makeStub(dur) {
-    var d = dur || 8;
+    var d = dur || 6;
     return {
       seek: function () { return this; },
       time: function () { return 0; },
@@ -47,14 +54,45 @@ const TIMELINE_STUB_SCRIPT = `<script>
   // present when the runtime queries window.__timelines on DOMContentLoaded.
   if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(6);
   // Our DOMContentLoaded fires before HyperFrames' (we're earlier in <head>).
-  // Use it to guarantee data-duration is a valid positive number on every
-  // composition root before getDeclaredDuration() reads the DOM attribute.
+  // Use it to:
+  //   a) Compute the true composition span from CSS animation timings (getAnimations
+  //      returns all animations including paused ones, so this works with
+  //      animation-play-state:paused).
+  //   b) Write that span into data-duration so getDeclaredDuration() returns the real
+  //      value — preventing seeks past the last keyframe.
+  //   c) Register stubs for any non-'variant' composition ids.
   document.addEventListener('DOMContentLoaded', function () {
+    // Step a: find the latest animation end time across the whole page.
+    var maxEnd = 0;
+    document.querySelectorAll('*').forEach(function (el) {
+      (el.getAnimations ? el.getAnimations() : []).forEach(function (a) {
+        var e = a.effect;
+        if (!e || !e.getTiming) return;
+        var t = e.getTiming();
+        var delay = typeof t.delay    === 'number' ? Math.max(0, t.delay) : 0; // ms
+        var dur   = typeof t.duration === 'number' ? t.duration : 0;           // ms
+        var iters = (typeof t.iterations === 'number' && isFinite(t.iterations) && t.iterations > 0)
+                    ? t.iterations : 1;
+        var end = (delay + dur * iters) / 1000; // → seconds
+        if (end > maxEnd) maxEnd = end;
+      });
+    });
+
+    // Step b & c: apply to every composition root.
     document.querySelectorAll('[data-composition-id]').forEach(function (el) {
       var id = el.getAttribute('data-composition-id');
-      if (id && !window.__timelines[id]) window.__timelines[id] = makeStub(8);
-      var dur = parseFloat(el.getAttribute('data-duration') || '0');
-      if (!(dur > 0)) el.setAttribute('data-duration', '6');
+      var declared = parseFloat(el.getAttribute('data-duration') || '0');
+      // Prefer the computed span; fall back to declared value; last resort: 6 s.
+      var effective = maxEnd > 0 ? maxEnd : (declared > 0 ? declared : 6);
+      el.setAttribute('data-duration', String(effective));
+
+      // Register stub (or update existing one) with the correct duration.
+      if (id && !window.__timelines[id]) {
+        window.__timelines[id] = makeStub(effective);
+      } else if (id && window.__timelines[id]) {
+        window.__timelines[id].duration      = function () { return effective; };
+        window.__timelines[id].totalDuration = function () { return effective; };
+      }
     });
   });
 })();
@@ -100,9 +138,11 @@ export function renderComposition(htmlContent: string, jobId: string): string {
   fs.mkdirSync(jobDir, { recursive: true })
   fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent), 'utf-8')
 
-  // --workers 1: single Chrome — parallel workers (default in 0.6.x) cause OOM in
-  // Railway's Docker container because each worker spawns its own Chrome process.
-  execSync(`npx hyperframes render ${jobDir} -o ${outputPath} --workers 1`, {
+  // --workers 1: single Chrome — parallel workers (default in 0.6.x) cause OOM.
+  // --quality draft: uses a fast x264 preset without mbtree. The default (standard)
+  //   uses mbtree=1 + rc_lookahead=40 which buffers frames before flushing; if Chrome
+  //   delivers fewer frames than expected the encoder never flushes → size=0kB output.
+  execSync(`npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft`, {
     timeout: 300_000,
     stdio: 'pipe',
   })

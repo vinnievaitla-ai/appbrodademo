@@ -14,11 +14,10 @@ COMPOSITION RULES
 ════════════════════════════════════════
 1. Root element (exact format required — ONE only):
    <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920"
-        data-start="0" data-duration="6">
+        data-start="0" data-duration="4">
    - Always 1080×1920 (vertical format for end cards / mobile)
    ⚠ CRITICAL: data-composition-id MUST be exactly "variant" — any other value breaks the renderer.
-   ⚠ CRITICAL: data-duration MUST be a positive integer (e.g. 6) — omitting it causes zero-duration failure.
-   - data-duration must equal the total composition length in seconds
+   ⚠ CRITICAL: data-duration MUST exactly match the last animation end time (see rule 4).
    - Body must be exactly 1080px × 1920px with overflow:hidden; margin:0; padding:0
    ⚠ ONLY the root <div id="stage"> may have data-composition-id.
      NEVER put data-composition-id on any child element — it creates broken sub-compositions.
@@ -34,9 +33,15 @@ COMPOSITION RULES
    data-track-index controls layering (0 = base, higher = on top)
    ⚠ Do NOT add data-composition-id here — clips use data-start/data-duration only.
 
-4. Total composition: 4–6 seconds. Keep it tight — shorter renders use less memory.
+4. Total composition: 3–4 seconds. Keep it tight — the renderer captures ~30 frames per second
+   and memory is limited.
+   ⚠ CRITICAL: data-duration on the root element MUST equal the LAST animation end time.
+   Calculate it as: max over all animated elements of (animation-delay + animation-duration).
+   Example: fade-in 1s delay + 1s duration = 2s; fade-out at 2s delay + 1s = 3s end → data-duration="3"
+   If data-duration is LONGER than your animations, the renderer seeks past the last frame and fails.
 
-5. Supported CSS: @keyframes, gradients, flexbox, transforms, filters, text-shadow, box-shadow, clip-path.
+5. Supported CSS: @keyframes, gradients, flexbox, transforms, opacity, text-shadow, box-shadow.
+   Avoid CSS filter (blur/drop-shadow filter) — it requires expensive per-frame render passes.
    Include all CSS inside a <style> block in <head>.
 
 6. No external media (no <img src=>, no <video>) unless a URL is explicitly provided.
