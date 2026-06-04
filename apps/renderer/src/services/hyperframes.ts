@@ -246,17 +246,16 @@ export async function renderComposition(
   durationSecs = 3,
   templateUrl?: string
 ): Promise<string> {
-  const jobDir = path.join(TMP_DIR, jobId)
-  // When compositing, HyperFrames writes the overlay to a side file; FFmpeg produces the final.
+  const jobDir   = path.join(TMP_DIR, jobId)
+  const framesDir = path.join(TMP_DIR, `${jobId}-frames`)
   const overlayPath = templateUrl
     ? path.join(TMP_DIR, `${jobId}-overlay.mp4`)
     : path.join(TMP_DIR, `${jobId}.mp4`)
   const finalPath = path.join(TMP_DIR, `${jobId}.mp4`)
 
   fs.mkdirSync(jobDir, { recursive: true })
+  fs.mkdirSync(framesDir, { recursive: true })
 
-  // Pass durationSecs so the sanitizer uses it as the data-duration fallback AND
-  // always overwrites whatever Claude generated to match the intended composition length.
   fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent, durationSecs), 'utf-8')
 
   // CSS-only overlay: safe up to 45 frames (simple text/shapes, no video element).
@@ -266,9 +265,19 @@ export async function renderComposition(
   //  11 s →  4 fps (44 frames)
   const fps = Math.min(15, Math.max(4, Math.round(45 / durationSecs)))
 
+  // Step 1: HyperFrames captures frames only — no FFmpeg encoding.
+  // png-sequence skips HyperFrames' streaming encoder (which spawns 60 x264 threads
+  // and OOMs the 512 MB Railway container). Frames land at framesDir/frame_%06d.png.
   execSync(
-    `npx hyperframes render ${jobDir} -o ${overlayPath} --workers 1 --quality draft --fps ${fps} --docker`,
+    `npx hyperframes render ${jobDir} --format=png-sequence -o ${framesDir} --workers 1 --fps ${fps} --no-browser-gpu`,
     { timeout: 300_000, stdio: 'pipe' }
+  )
+
+  // Step 2: Encode frames → MP4 with capped threads so we stay within 512 MB.
+  execSync(
+    `ffmpeg -threads 4 -y -framerate ${fps} -i "${framesDir}/frame_%06d.png" ` +
+    `-c:v libx264 -threads 4 -preset ultrafast -pix_fmt yuv420p -t ${durationSecs} "${overlayPath}"`,
+    { timeout: 120_000, stdio: 'pipe' }
   )
 
   if (templateUrl) {
@@ -280,6 +289,7 @@ export async function renderComposition(
 
 export function cleanupTmp(jobId: string) {
   try { fs.rmSync(path.join(TMP_DIR, jobId), { recursive: true, force: true }) } catch {}
+  try { fs.rmSync(path.join(TMP_DIR, `${jobId}-frames`), { recursive: true, force: true }) } catch {}
   for (const suffix of ['.mp4', '-overlay.mp4', '-template.mp4']) {
     try { fs.unlinkSync(path.join(TMP_DIR, jobId) + suffix) } catch {}
   }
