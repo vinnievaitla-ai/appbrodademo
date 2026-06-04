@@ -55,34 +55,41 @@ const TIMELINE_STUB_SCRIPT = `<script>
   if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(6);
   // Our DOMContentLoaded fires before HyperFrames' (we're earlier in <head>).
   // Use it to:
-  //   a) Compute the true composition span from CSS animation timings (getAnimations
-  //      returns all animations including paused ones, so this works with
-  //      animation-play-state:paused).
-  //   b) Write that span into data-duration so getDeclaredDuration() returns the real
-  //      value — preventing seeks past the last keyframe.
+  //   a) Compute the true composition span from computed CSS animation timings.
+  //      getComputedStyle() returns animationDuration/animationDelay as CSS strings
+  //      like "3s" or "500ms" — unambiguous units, available from the first style calc.
+  //      (getAnimations().effect.getTiming().duration was tried first but Chrome
+  //       headless-shell returns values in seconds, not ms, making /1000 wrong.)
+  //   b) Write that span into data-duration so getDeclaredDuration() gets the real value.
   //   c) Register stubs for any non-'variant' composition ids.
   document.addEventListener('DOMContentLoaded', function () {
-    // Step a: find the latest animation end time across the whole page.
+    // Parses a CSS time string ("2s", "500ms", "0") → number of seconds.
+    function parseSec(s) {
+      s = (s || '').trim();
+      if (!s) return 0;
+      return s.indexOf('ms') !== -1 ? parseFloat(s) / 1000 : (parseFloat(s) || 0);
+    }
+
+    // Step a: walk every element and read its computed animation timings.
     var maxEnd = 0;
     document.querySelectorAll('*').forEach(function (el) {
-      (el.getAnimations ? el.getAnimations() : []).forEach(function (a) {
-        var e = a.effect;
-        if (!e || !e.getTiming) return;
-        var t = e.getTiming();
-        var delay = typeof t.delay    === 'number' ? Math.max(0, t.delay) : 0; // ms
-        var dur   = typeof t.duration === 'number' ? t.duration : 0;           // ms
-        var iters = (typeof t.iterations === 'number' && isFinite(t.iterations) && t.iterations > 0)
-                    ? t.iterations : 1;
-        var end = (delay + dur * iters) / 1000; // → seconds
+      var cs = window.getComputedStyle(el);
+      var durs   = (cs.animationDuration || '').split(',');
+      var delays = (cs.animationDelay   || '').split(',');
+      for (var k = 0; k < durs.length; k++) {
+        var d = parseSec(durs[k]);
+        if (d <= 0) continue; // no real animation on this slot
+        var delay = parseSec(delays[k] || '0s');
+        var end = Math.max(0, delay) + d;
         if (end > maxEnd) maxEnd = end;
-      });
+      }
     });
 
     // Step b & c: apply to every composition root.
     document.querySelectorAll('[data-composition-id]').forEach(function (el) {
       var id = el.getAttribute('data-composition-id');
       var declared = parseFloat(el.getAttribute('data-duration') || '0');
-      // Prefer the computed span; fall back to declared value; last resort: 6 s.
+      // Prefer computed span; fall back to declared value; last resort: 6 s.
       var effective = maxEnd > 0 ? maxEnd : (declared > 0 ? declared : 6);
       el.setAttribute('data-duration', String(effective));
 
