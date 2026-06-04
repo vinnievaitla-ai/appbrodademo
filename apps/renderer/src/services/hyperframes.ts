@@ -83,10 +83,12 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
 
       if (!found) {
         found = true
-        if (!attrs.includes('data-duration')) {
-          return match.replace('>', ` data-duration="${defaultDuration}">`)
+        // Always overwrite data-duration so it matches the intended composition length
+        // regardless of what Claude generated (e.g. it may copy the 3 s template example).
+        if (attrs.includes('data-duration')) {
+          return match.replace(/data-duration="[^"]*"/, `data-duration="${defaultDuration}"`)
         }
-        return match
+        return match.replace('>', ` data-duration="${defaultDuration}">`)
       }
 
       return match.replace(/\s*data-composition-id="[^"]*"/, '')
@@ -99,12 +101,13 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
   // With --fps 15 HyperFrames reads data-duration synchronously before DOMContentLoaded,
   // so it MUST be present in the serialised HTML, not set at runtime.
   if (!found && html.includes('data-composition-id=')) {
-    const alreadyHasBoth =
-      /data-composition-id="[^"]*"[^>]*data-duration|data-duration[^>]*data-composition-id/.test(html)
-    if (!alreadyHasBoth) {
+    // Overwrite existing data-duration if present, otherwise inject it.
+    if (/data-composition-id="[^"]*"[^>]*data-duration|data-duration[^>]*data-composition-id/.test(html)) {
+      html = html.replace(/data-duration="[^"]*"/, `data-duration="${defaultDuration}"`)
+    } else {
       html = html.replace(/(data-composition-id="[^"]*")/, `$1 data-duration="${defaultDuration}"`)
-      found = true
     }
+    found = true
   }
 
   // Fix 2 – inject timeline stub into <head>
@@ -119,23 +122,28 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
   return html
 }
 
-export function renderComposition(htmlContent: string, jobId: string): string {
+export function renderComposition(htmlContent: string, jobId: string, durationSecs = 3): string {
   const jobDir = path.join(TMP_DIR, jobId)
   const outputPath = path.join(TMP_DIR, `${jobId}.mp4`)
 
   fs.mkdirSync(jobDir, { recursive: true })
-  fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent), 'utf-8')
+  // Pass durationSecs so the sanitizer uses it as the data-duration fallback AND
+  // always overwrites whatever Claude generated to match the intended composition length.
+  fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent, durationSecs), 'utf-8')
 
-  // --workers 1:     single Chrome — parallel workers cause OOM in the container.
-  // --quality draft: fast x264 preset (mbtree=0) so the encoder flushes each frame
-  //                  immediately instead of buffering a 40-frame lookahead window.
-  // --fps 15:        3 s @ 15 fps = 45 total frames, safely below Chrome's ~61-frame
-  //                  OOM ceiling. Higher fps causes Chrome to OOM mid-render, closing
-  //                  the FFmpeg pipe early and producing 0-byte output.
-  execSync(`npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft --fps 15`, {
-    timeout: 300_000,
-    stdio: 'pipe',
-  })
+  // fps is chosen to keep total frames ≤ 90 (empirical safe limit in this container)
+  // while staying at 15 fps for short clips (smoothest motion for fades/text).
+  // Formula: min(15, max(8, round(90 / duration)))
+  //   3 s → 15 fps (45 frames)
+  //   6 s → 15 fps (90 frames)
+  //   9 s → 10 fps (90 frames)
+  //  11 s →  8 fps (88 frames)
+  const fps = Math.min(15, Math.max(8, Math.round(90 / durationSecs)))
+
+  execSync(
+    `npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft --fps ${fps}`,
+    { timeout: 300_000, stdio: 'pipe' }
+  )
 
   return outputPath
 }

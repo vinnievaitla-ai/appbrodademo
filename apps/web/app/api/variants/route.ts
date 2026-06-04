@@ -4,7 +4,8 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const HYPERFRAMES_SYSTEM_PROMPT = `You are a HyperFrames video composition generator.
+function buildSystemPrompt(durationSecs: number): string {
+  return `You are a HyperFrames video composition generator.
 
 HyperFrames converts HTML files into MP4 videos by driving headless Chrome frame-by-frame and encoding with FFmpeg.
 The renderer has a built-in CSS animation frame adapter — do NOT add any custom window.__hf or window.__player scripts.
@@ -14,10 +15,10 @@ COMPOSITION RULES
 ════════════════════════════════════════
 1. Root element (exact format required — ONE only):
    <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920"
-        data-start="0" data-duration="3">
+        data-start="0" data-duration="${durationSecs}">
    - Always 1080×1920 (vertical format for end cards / mobile)
    ⚠ CRITICAL: data-composition-id MUST be exactly "variant" — any other value breaks the renderer.
-   ⚠ CRITICAL: data-duration MUST be a positive number matching your total animation length in seconds.
+   ⚠ CRITICAL: data-duration MUST be exactly "${durationSecs}" — the renderer enforces this value.
    - Body must be exactly 1080px × 1920px with overflow:hidden; margin:0; padding:0
    ⚠ ONLY the root <div id="stage"> may have data-composition-id.
      NEVER put data-composition-id on any child element — it creates broken sub-compositions.
@@ -33,8 +34,9 @@ COMPOSITION RULES
    data-track-index controls layering (0 = base, higher = on top)
    ⚠ Do NOT add data-composition-id here — clips use data-start/data-duration only.
 
-4. Total composition: exactly 3 seconds. The renderer runs at 15 fps → 45 total frames.
-   Keep data-duration="3" on the root element. Design all animations to fit within 3 s.
+4. Total composition: exactly ${durationSecs} seconds. Design all animations to fill the full ${durationSecs} s.
+   The last animation's (delay + duration) must equal ${durationSecs} s.
+   Example for ${durationSecs} s: fade-in over first 1 s, hold for ${Math.max(1, durationSecs - 2)} s, fade-out over last 1 s.
 
 5. Supported CSS: @keyframes, gradients, flexbox, transforms, opacity, text-shadow, box-shadow.
    Avoid CSS filter (blur/drop-shadow filter) — it requires expensive per-frame render passes.
@@ -56,6 +58,7 @@ FONTS — CRITICAL
 OUTPUT
 ════════════════════════════════════════
 Return ONLY the complete HTML file. No markdown fences, no explanation, no comments outside the HTML.`
+}
 
 export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get('category') || 'end_card'
@@ -74,11 +77,16 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = createServiceClient()
   const body = await request.json()
-  const { prompt, templateId } = body
+  const { prompt, templateId, templateDuration } = body
 
   if (!prompt?.trim()) {
     return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
   }
+
+  // Use provided template duration, clamped to a sane range
+  const durationSecs = typeof templateDuration === 'number' && templateDuration > 0
+    ? Math.min(60, Math.round(templateDuration))
+    : 3
 
   // Create job record
   const { data: job, error: jobError } = await supabase
@@ -98,7 +106,7 @@ export async function POST(request: NextRequest) {
       .eq('id', templateId)
       .single()
     if (template) {
-      templateContext = `\n\nBase template: "${template.name}" (${template.file_url})\nIf the template is a video, you may reference it as src="${template.file_url}" on a <video> element with appropriate data attributes.`
+      templateContext = `\n\nBase template: "${template.name}" (${template.file_url})\nThe template video is ${durationSecs} seconds long — your composition must match this exact duration.`
     }
   }
 
@@ -108,7 +116,7 @@ export async function POST(request: NextRequest) {
     const message = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
-      system: HYPERFRAMES_SYSTEM_PROMPT,
+      system: buildSystemPrompt(durationSecs),
       messages: [{
         role: 'user',
         content: `Generate a HyperFrames end card composition for: ${prompt}${templateContext}`
@@ -120,7 +128,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Claude API failed: ' + err.message }, { status: 500 })
   }
 
-  // Fire-and-forget to renderer — update job to failed if renderer is unreachable
+  // Fire-and-forget to renderer
   const rendererUrl = process.env.RENDERER_SERVICE_URL
   const rendererSecret = process.env.RENDERER_SECRET
 
@@ -129,14 +137,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Renderer service URL not set' }, { status: 500 })
   }
 
-  // Await Railway — it responds immediately with { status: 'accepted' } then renders async.
-  // Must be awaited: Vercel freezes the process the moment we return, so a fire-and-forget
-  // fetch would never actually be sent.
   try {
     const rendererRes = await fetch(`${rendererUrl}/render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rendererSecret}` },
-      body: JSON.stringify({ jobId: job.id, htmlContent }),
+      body: JSON.stringify({ jobId: job.id, htmlContent, duration: durationSecs }),
     })
     if (!rendererRes.ok) {
       const text = await rendererRes.text().catch(() => rendererRes.status.toString())

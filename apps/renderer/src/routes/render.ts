@@ -13,7 +13,11 @@ router.post('/render', (req: Request, res: Response) => {
     return
   }
 
-  const { jobId, htmlContent } = req.body as { jobId: string; htmlContent: string }
+  const { jobId, htmlContent, duration } = req.body as {
+    jobId: string
+    htmlContent: string
+    duration?: number
+  }
 
   if (!jobId || !htmlContent) {
     res.status(400).json({ error: 'jobId and htmlContent are required' })
@@ -28,7 +32,7 @@ router.post('/render', (req: Request, res: Response) => {
     try {
       await updateJobStatus(jobId, { status: 'processing' })
 
-      const outputPath = renderComposition(htmlContent, jobId)
+      const outputPath = renderComposition(htmlContent, jobId, duration)
       const publicUrl = await uploadGeneratedVariant(outputPath, jobId)
 
       await updateJobStatus(jobId, {

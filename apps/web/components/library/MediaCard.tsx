@@ -160,7 +160,7 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, isGenerated, onDel
             <video
               ref={videoRef}
               src={fileUrl}
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-contain"
               preload="metadata"
               muted
               playsInline

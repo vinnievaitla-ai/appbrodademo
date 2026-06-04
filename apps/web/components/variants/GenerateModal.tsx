@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Sparkles, X, ArrowRight, Wand2 } from 'lucide-react'
 
@@ -29,9 +29,11 @@ export function GenerateModal({ open, onClose, onJobCreated, selectedTemplate }:
   const [prompt, setPrompt] = useState('')
   const [error, setError] = useState('')
   const [stepIndex, setStepIndex] = useState(0)
+  const [templateDuration, setTemplateDuration] = useState<number | null>(null)
+  const templateVideoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    if (open) { setScreen('compose'); setPrompt(''); setError(''); setStepIndex(0) }
+    if (open) { setScreen('compose'); setPrompt(''); setError(''); setStepIndex(0); setTemplateDuration(null) }
   }, [open])
 
   useEffect(() => {
@@ -49,7 +51,13 @@ export function GenerateModal({ open, onClose, onJobCreated, selectedTemplate }:
       const res = await fetch('/api/variants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, templateId: selectedTemplate?.id }),
+        body: JSON.stringify({
+          prompt,
+          templateId: selectedTemplate?.id,
+          // Send measured template duration (rounded to nearest second) so the
+          // renderer generates a composition that matches the original video length.
+          templateDuration: templateDuration ? Math.round(templateDuration) : undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Generation failed')
@@ -89,14 +97,24 @@ export function GenerateModal({ open, onClose, onJobCreated, selectedTemplate }:
               {selectedTemplate && (
                 <div className="rounded-xl overflow-hidden border border-gray-100 bg-gray-950 shadow-sm">
                   <video
+                    ref={templateVideoRef}
                     src={selectedTemplate.fileUrl}
-                    className="w-full max-h-40 object-cover"
+                    className="w-full max-h-40 object-contain"
                     controls
                     preload="metadata"
+                    onLoadedMetadata={() => {
+                      const dur = templateVideoRef.current?.duration
+                      if (dur && isFinite(dur)) setTemplateDuration(dur)
+                    }}
                   />
                   <div className="px-3 py-2 flex items-center gap-2 border-t border-white/5">
                     <Sparkles className="h-3 w-3 text-blue-400" />
                     <span className="text-[11px] text-gray-400 truncate">{selectedTemplate.name}</span>
+                    {templateDuration && (
+                      <span className="ml-auto shrink-0 text-[10px] text-blue-400 font-semibold bg-blue-900/30 px-1.5 py-0.5 rounded">
+                        {Math.round(templateDuration)}s
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
