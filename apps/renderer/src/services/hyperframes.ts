@@ -267,7 +267,7 @@ export async function renderComposition(
   const fps = Math.min(15, Math.max(4, Math.round(45 / durationSecs)))
 
   execSync(
-    `npx hyperframes render ${jobDir} -o ${overlayPath} --workers 1 --quality draft --fps ${fps}`,
+    `npx hyperframes render ${jobDir} -o ${overlayPath} --workers 1 --quality draft --fps ${fps} --docker`,
     { timeout: 300_000, stdio: 'pipe' }
   )
 
