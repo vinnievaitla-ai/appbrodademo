@@ -86,6 +86,33 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
   html = html.replace(/<audio\b[^>]*>/gi, '')
   html = html.replace(/<img\b[^>]*\/?>/gi, '')
 
+  // Neutralize forbidden CSS that crashes Chrome headless-shell in SwiftShader (software) mode.
+  // Applies to both <style> blocks and inline style= attributes; regex stops at ; } " '
+  // so it never bleeds across property boundaries.
+  //
+  //   filter / -webkit-filter  → 'none'  (blur, drop-shadow, etc. OOM the SW renderer)
+  //   backdrop-filter          → removed  (same reason)
+  //   mix-blend-mode           → removed  (not composited correctly in SW mode)
+  //
+  // \bfilter also matches the 'filter' token inside '-webkit-filter' (the '-' is \W so
+  // \b fires between it and the 'f'), leaving the prefix in place: -webkit-filter: none.
+  html = html
+    .replace(/\bfilter\s*:\s*[^;}"']+/gi, 'filter: none')
+    .replace(/\bbackdrop-filter\s*:\s*[^;}"']+/gi, '')
+    .replace(/\bmix-blend-mode\s*:\s*[^;}"']+/gi, '')
+
+  // Clamp tiny background-size values — halftone/dot patterns (e.g. 8px 8px) force
+  // SwiftShader to tessellate thousands of radial-gradients per frame, causing OOM.
+  html = html.replace(
+    /\bbackground-size\s*:\s*([\d.]+)(px|em|rem)(?:\s+([\d.]+)(px|em|rem))?/gi,
+    (m, w, wu, h, hu) => {
+      const toPx = (v: string, u: string) => parseFloat(v) * (u === 'px' ? 1 : 16)
+      const wPx = toPx(w, wu)
+      const hPx = h ? toPx(h, hu) : wPx
+      return (wPx < 100 || hPx < 100) ? 'background-size: 120px 120px' : m
+    }
+  )
+
   let found = false
 
   // Fix 1 & 3 – root gets data-duration; extra data-composition-id stripped from children.
