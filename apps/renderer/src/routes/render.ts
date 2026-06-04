@@ -53,18 +53,22 @@ DESIGN PRINCIPLES — READ FIRST
 You are creating a TEXT OVERLAY on top of a real video. The black background becomes transparent,
 so only your non-black elements appear over the video. Design like a professional mobile ad:
 
-RULES:
+CONTENT RULE — MOST IMPORTANT:
+- ONLY include text and elements that the user explicitly requested.
+- Do NOT invent extra slogans, subtitles, taglines, or CTA buttons unless the user asked for them.
+- If the user says "overlay text X", show exactly X — nothing more.
+
+LAYOUT RULES:
 - TEXT IS THE HERO. The message must be large, bold, and instantly readable at a glance.
 - Keep most of the frame transparent (black) so the video underneath stays clearly visible.
-- Put a semi-transparent dark rounded card (background: rgba(0,0,0,0.55); border-radius: 20px; padding: 40px 60px) BEHIND text blocks to guarantee legibility over any video background.
+- Put a semi-transparent dark rounded card (background: rgba(0,0,0,0.55); border-radius: 20px; padding: 40px 60px) BEHIND text to guarantee legibility over any video background.
 - Place the main message in the upper-center or center of the screen (top: 20%–50%).
-- Keep the bottom 20% of screen clear OR use it for a single clean CTA pill button only.
 - Animations: subtle fade-in (0→1 opacity) or gentle scale (0.9→1). No chaotic motion.
-- Maximum 3–4 visible elements: 1 text card + optional subtitle + optional CTA button + 1 optional small accent.
+- No decorative shapes unless the user asks for them.
 
 STRICTLY FORBIDDEN:
-- Large solid-colored shapes (circles, blobs) larger than 100px in the centre of the frame — they block the video and the text.
-- More than 2 purely decorative shapes. When in doubt, use zero decorations.
+- Adding any text, slogans, buttons, or copy that the user did not ask for.
+- Large solid-colored shapes (circles, blobs) larger than 100px — they block the video.
 - Text without a readable background — always use the dark card behind text.
 - Cluttered layouts. Clean = professional.
 
