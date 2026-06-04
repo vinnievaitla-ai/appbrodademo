@@ -136,21 +136,69 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
   return html
 }
 
-export function renderComposition(htmlContent: string, jobId: string, durationSecs = 3): string {
+// ─── Template video pre-processing ──────────────────────────────────────────
+//
+// Chrome OOMs when HyperFrames tries to seek through a full-resolution 1080×1920
+// video during frame capture. Fix: download the template video and resize it to
+// 540×960 before passing to HyperFrames. CSS `object-fit:cover` scales it back up
+// to fill the stage, so the rendered output is still 1080×1920. Chrome's video
+// decoder uses 4× less RAM at 540×960 vs 1080×1920.
+//
+// We also use a dense keyframe interval (-g 8 at 30 fps ≈ one keyframe every 0.27 s)
+// so HyperFrames can seek accurately to every 4-fps capture point without Chrome
+// needing to decode a long GOP to find the right frame.
+
+async function localizeTemplateVideo(html: string, jobDir: string): Promise<string> {
+  // Find the first <video> with a remote http URL
+  const videoTagMatch = html.match(/<video\b[^>]+>/i)
+  if (!videoTagMatch) return html
+  const srcMatch = videoTagMatch[0].match(/\bsrc\s*=\s*["'](https?:\/\/[^"']+)["']/i)
+  if (!srcMatch) return html
+
+  const remoteUrl = srcMatch[1]
+  const rawPath  = path.join(jobDir, 'template-raw.mp4')
+  const smallPath = path.join(jobDir, 'template-sm.mp4')
+
+  try {
+    // Download
+    const res = await fetch(remoteUrl, { signal: AbortSignal.timeout(90_000) })
+    if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+    fs.writeFileSync(rawPath, Buffer.from(await res.arrayBuffer()))
+
+    // Resize to 540×960 with dense keyframes
+    execSync(
+      `ffmpeg -y -i "${rawPath}" -vf "scale=540:960:flags=bilinear" ` +
+      `-c:v libx264 -preset ultrafast -crf 23 -g 8 -keyint_min 8 -an "${smallPath}"`,
+      { timeout: 120_000, stdio: 'pipe' }
+    )
+
+    return html.replace(remoteUrl, 'template-sm.mp4')
+  } catch (err: any) {
+    console.warn('[hyperframes] Video pre-processing failed, falling back to remote URL:', err.message)
+    return html
+  }
+}
+
+export async function renderComposition(htmlContent: string, jobId: string, durationSecs = 3): Promise<string> {
   const jobDir = path.join(TMP_DIR, jobId)
   const outputPath = path.join(TMP_DIR, `${jobId}.mp4`)
 
   fs.mkdirSync(jobDir, { recursive: true })
+
+  // If the HTML embeds a remote template video, download + resize it to 540×960
+  // so Chrome's decoder stays within the container's memory budget.
+  const processedHtml = await localizeTemplateVideo(htmlContent, jobDir)
+
   // Pass durationSecs so the sanitizer uses it as the data-duration fallback AND
   // always overwrites whatever Claude generated to match the intended composition length.
-  fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent, durationSecs), 'utf-8')
+  fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(processedHtml, durationSecs), 'utf-8')
 
   // fps is chosen to keep total frames ≤ 45 (safe for simple CSS + video compositing).
   // OOM data points:
   //   Simple text overlay (CSS only): ~45 frames ✓
   //   Tiled radial-gradient CSS (halftone): crashes at ~28 frames ✗  → banned in prompt
-  //   Video + simple overlay: similar profile to simple CSS overlay (video decode is
-  //     GPU-cached, not per-pixel CSS computation), so 45-frame budget should hold.
+  //   Video + simple overlay: video decoder uses GPU-cached frames, not per-pixel CSS
+  //     gradient computation, so 45-frame budget should hold at 540×960 input.
   // Formula: min(15, max(4, round(45 / duration)))
   //   3 s → 15 fps (45 frames)
   //   5 s →  9 fps (45 frames)

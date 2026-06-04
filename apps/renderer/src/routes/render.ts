@@ -32,7 +32,7 @@ router.post('/render', (req: Request, res: Response) => {
     try {
       await updateJobStatus(jobId, { status: 'processing' })
 
-      const outputPath = renderComposition(htmlContent, jobId, duration)
+      const outputPath = await renderComposition(htmlContent, jobId, duration)
       const publicUrl = await uploadGeneratedVariant(outputPath, jobId)
 
       await updateJobStatus(jobId, {
