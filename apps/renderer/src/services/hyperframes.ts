@@ -74,9 +74,10 @@ const TIMELINE_STUB_SCRIPT = `<script>
 function sanitizeHtml(html: string, defaultDuration = 3): string {
   let found = false
 
-  // Fix 1 & 3 – root gets data-duration; extra data-composition-id stripped from children
+  // Fix 1 & 3 – root gets data-duration; extra data-composition-id stripped from children.
+  // 'body' included so <body data-composition-id="variant"> works too.
   html = html.replace(
-    /(<(?:div|section|article|main|span)(\s[^>]*)?>)/g,
+    /(<(?:div|section|article|main|span|body)(\s[^>]*)?>)/g,
     (match, _full, attrs = '') => {
       if (!attrs.includes('data-composition-id')) return match
 
@@ -91,6 +92,20 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
       return match.replace(/\s*data-composition-id="[^"]*"/, '')
     }
   )
+
+  // Belt-and-suspenders: if data-composition-id is on a tag NOT matched above (e.g. <html>,
+  // a custom element, or a tag whose attributes span multiple lines in a way the regex
+  // skipped), inject data-duration directly after the attribute value.
+  // With --fps 15 HyperFrames reads data-duration synchronously before DOMContentLoaded,
+  // so it MUST be present in the serialised HTML, not set at runtime.
+  if (!found && html.includes('data-composition-id=')) {
+    const alreadyHasBoth =
+      /data-composition-id="[^"]*"[^>]*data-duration|data-duration[^>]*data-composition-id/.test(html)
+    if (!alreadyHasBoth) {
+      html = html.replace(/(data-composition-id="[^"]*")/, `$1 data-duration="${defaultDuration}"`)
+      found = true
+    }
+  }
 
   // Fix 2 – inject timeline stub into <head>
   if (html.includes('<head>')) {
