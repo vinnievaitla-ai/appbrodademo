@@ -74,6 +74,18 @@ function buildTimelineStubScript(durationSecs: number): string {
 }
 
 function sanitizeHtml(html: string, defaultDuration = 3): string {
+  // ─── Pre-cleaning ─────────────────────────────────────────────────────────────
+  // Claude occasionally wraps output in ```html fences despite instructions.
+  html = html.replace(/^```(?:html)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim()
+
+  // Strip <video>, <audio>, <img> — they cause Chrome headless OOM / FFmpeg streaming
+  // encode failures in the colorkey-compositing pipeline (overlay must be CSS-only).
+  html = html.replace(/<video\b[^>]*>[\s\S]*?<\/video\s*>/gi, '')
+  html = html.replace(/<video\b[^>]*>/gi, '')
+  html = html.replace(/<audio\b[^>]*>[\s\S]*?<\/audio\s*>/gi, '')
+  html = html.replace(/<audio\b[^>]*>/gi, '')
+  html = html.replace(/<img\b[^>]*\/?>/gi, '')
+
   let found = false
 
   // Fix 1 & 3 – root gets data-duration; extra data-composition-id stripped from children.
@@ -110,14 +122,35 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
     found = true
   }
 
-  // Last-resort: Claude omitted data-composition-id entirely (e.g. generated plain HTML without
-  // the required root attributes). Wrap the <body> content in a proper composition root so
-  // HyperFrames can find the duration instead of reporting zero and aborting.
+  // Fallback: Claude used id="stage" but forgot data-composition-id="variant".
+  // Patch the existing element rather than wrapping the whole document (which creates malformed HTML).
+  if (!found && html.includes('id="stage"')) {
+    html = html.replace(
+      /(<[^>]+\bid="stage"[^>]*)>/,
+      (_, tagContent) => {
+        let out = tagContent
+        if (!out.includes('data-composition-id')) out += ' data-composition-id="variant"'
+        if (!out.includes('data-duration')) {
+          out += ` data-duration="${defaultDuration}"`
+        } else {
+          out = out.replace(/data-duration\s*=\s*["'][^"']*["']/, `data-duration="${defaultDuration}"`)
+        }
+        return out + '>'
+      }
+    )
+    found = true
+  }
+
+  // Last-resort: Claude omitted data-composition-id and id="stage" entirely.
+  // Wrap content in a proper composition root so HyperFrames can find the duration.
   if (!found) {
     const compositionRoot = `<div id="stage" data-composition-id="variant" data-width="1080" data-height="1920" data-start="0" data-duration="${defaultDuration}" style="width:1080px;height:1920px;overflow:hidden;position:relative;margin:0;padding:0;">`
     if (/<body[^>]*>/i.test(html)) {
       html = html.replace(/(<body[^>]*>)/i, `$1${compositionRoot}`)
       html = html.replace(/<\/body>/i, `</div></body>`)
+    } else if (/<\/html\s*>/i.test(html)) {
+      // Full HTML doc without explicit <body> — insert before </html>
+      html = html.replace(/<\/html\s*>/i, `<body>${compositionRoot}</div></body></html>`)
     } else {
       html = compositionRoot + html + '</div>'
     }
