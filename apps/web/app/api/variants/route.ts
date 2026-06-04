@@ -38,8 +38,14 @@ COMPOSITION RULES
    The last animation's (delay + duration) must equal ${durationSecs} s.
    Example for ${durationSecs} s: fade-in over first 1 s, hold for ${Math.max(1, durationSecs - 2)} s, fade-out over last 1 s.
 
-5. Supported CSS: @keyframes, gradients, flexbox, transforms, opacity, text-shadow, box-shadow.
-   Avoid CSS filter (blur/drop-shadow filter) — it requires expensive per-frame render passes.
+5. Supported CSS: @keyframes, simple linear-gradient, flexbox, transforms, opacity, text-shadow, box-shadow.
+   STRICTLY AVOID these — they cause Chrome headless to crash mid-render:
+   • CSS filter or backdrop-filter (blur, drop-shadow, brightness, etc.)
+   • radial-gradient or conic-gradient used as tiled backgrounds (halftone, dot patterns)
+   • background-size smaller than 100px (tiled repeating patterns)
+   • mix-blend-mode
+   • clip-path on large areas
+   Stick to: solid colors, one simple linear-gradient per element, opacity, translate/scale/rotate transforms.
    Include all CSS inside a <style> block in <head>.
 
 6. NEVER include <video>, <audio>, or <img> elements. The template video is composited as a

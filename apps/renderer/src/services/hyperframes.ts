@@ -145,14 +145,16 @@ export function renderComposition(htmlContent: string, jobId: string, durationSe
   // always overwrites whatever Claude generated to match the intended composition length.
   fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent, durationSecs), 'utf-8')
 
-  // fps is chosen to keep total frames ≤ 90 (empirical safe limit in this container)
-  // while staying at 15 fps for short clips (smoothest motion for fades/text).
-  // Formula: min(15, max(8, round(90 / duration)))
-  //   3 s → 15 fps (45 frames)
-  //   6 s → 15 fps (90 frames)
-  //   9 s → 10 fps (90 frames)
-  //  11 s →  8 fps (88 frames)
-  const fps = Math.min(15, Math.max(8, Math.round(90 / durationSecs)))
+  // fps is chosen to keep total frames ≤ 30 (empirical OOM-safe limit in this container).
+  // Empirical observations: complex CSS (tiled gradients, halftone, etc.) crashes Chrome
+  // headless at ~28 frames. Simple text-only compositions survive ~45 frames. Targeting
+  // 30 total frames gives headroom for moderately complex compositions.
+  // Formula: min(10, max(3, round(30 / duration)))
+  //   3 s → 10 fps (30 frames)
+  //   5 s →  6 fps (30 frames)
+  //  11 s →  3 fps (33 frames)
+  //  30 s →  3 fps (90 frames — only reached for very long clips)
+  const fps = Math.min(10, Math.max(3, Math.round(30 / durationSecs)))
 
   execSync(
     `npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft --fps ${fps}`,
