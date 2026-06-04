@@ -45,7 +45,7 @@ const TIMELINE_STUB_SCRIPT = `<script>
   // Register synchronously for the standard composition id used in generated HTML.
   // This runs in <head>, before the HyperFrames RUNTIME_IIFE, so the stub is
   // present when the runtime queries window.__timelines on DOMContentLoaded.
-  if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(8);
+  if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(6);
   // Belt-and-suspenders: also catch any other ids after DOM is ready.
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-composition-id]').forEach(function (el) {
@@ -56,7 +56,7 @@ const TIMELINE_STUB_SCRIPT = `<script>
 })();
 </script>`
 
-function sanitizeHtml(html: string, defaultDuration = 8): string {
+function sanitizeHtml(html: string, defaultDuration = 6): string {
   let found = false
 
   // Fix 1 & 3 – root gets data-duration; extra data-composition-id stripped from children

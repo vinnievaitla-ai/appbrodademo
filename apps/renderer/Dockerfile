@@ -39,8 +39,15 @@ RUN apt-get update && apt-get install -y \
 RUN npx --yes @puppeteer/browsers install chrome-headless-shell@stable --path /opt/chrome \
     && CHROME_BIN=$(find /opt/chrome -name 'chrome-headless-shell' -type f | head -1) \
     && chmod +x "$CHROME_BIN" \
-    && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell \
+    && ln -sf "$CHROME_BIN" /usr/local/bin/chrome-headless-shell-real \
     && echo "chrome-headless-shell installed at: $CHROME_BIN"
+
+# Install wrapper script that clamps Chrome's GPU memory budget to a container-safe
+# value. HyperFrames calls os.totalmem() (reads HOST RAM, e.g. 32 GB) and passes
+# --force-gpu-mem-available-mb=16384 to SwiftShader. Inside a 512 MB container this
+# causes immediate SIGKILL. The wrapper intercepts and replaces it with 256 MB.
+COPY apps/renderer/scripts/chrome-wrapper.sh /usr/local/bin/chrome-headless-shell
+RUN chmod +x /usr/local/bin/chrome-headless-shell
 
 ENV PRODUCER_HEADLESS_SHELL_PATH=/usr/local/bin/chrome-headless-shell
 

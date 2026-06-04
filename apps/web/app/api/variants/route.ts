@@ -14,7 +14,7 @@ COMPOSITION RULES
 ════════════════════════════════════════
 1. Root element (exact format required — ONE only):
    <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920"
-        data-start="0" data-duration="8">
+        data-start="0" data-duration="6">
    - Always 1080×1920 (vertical format for end cards / mobile)
    - data-duration must equal the total composition length in seconds
    - Body must be exactly 1080px × 1920px with overflow:hidden; margin:0; padding:0
@@ -32,7 +32,7 @@ COMPOSITION RULES
    data-track-index controls layering (0 = base, higher = on top)
    ⚠ Do NOT add data-composition-id here — clips use data-start/data-duration only.
 
-4. Total composition: 5–8 seconds. Keep it tight.
+4. Total composition: 4–6 seconds. Keep it tight — shorter renders use less memory.
 
 5. Supported CSS: @keyframes, gradients, flexbox, transforms, filters, text-shadow, box-shadow, clip-path.
    Include all CSS inside a <style> block in <head>.
