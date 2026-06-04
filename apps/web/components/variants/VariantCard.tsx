@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { Download, Trash2, Play, Pause, X, Sparkles } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Download, Trash2, Play, Pause, X, Sparkles, Pencil } from 'lucide-react'
 
 interface VariantCardProps {
   id: string
@@ -89,12 +89,30 @@ function VideoModal({ outputUrl, prompt, onClose }: { outputUrl: string; prompt:
   )
 }
 
+const STORAGE_KEY = (id: string) => `variant-name-${id}`
+
 export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProps) {
   const [showModal, setShowModal] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [duration, setDuration] = useState<number | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [name, setName] = useState('')
+  const [isEditingName, setIsEditingName] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY(id))
+    if (stored) setName(stored)
+  }, [id])
+
+  const saveName = (val: string) => {
+    const trimmed = val.trim()
+    setName(trimmed)
+    if (trimmed) localStorage.setItem(STORAGE_KEY(id), trimmed)
+    else localStorage.removeItem(STORAGE_KEY(id))
+    setIsEditingName(false)
+  }
 
   const handleLoadedMetadata = () => {
     const dur = videoRef.current?.duration
@@ -177,8 +195,36 @@ export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProp
 
         {/* Footer */}
         <div className="px-2.5 py-2 flex flex-col gap-2">
+          {/* Name (editable) */}
+          {isEditingName ? (
+            <input
+              ref={nameInputRef}
+              defaultValue={name}
+              autoFocus
+              placeholder="Enter a name…"
+              className="text-[11px] font-medium text-gray-900 leading-snug w-full border-b border-blue-400 bg-transparent outline-none pb-0.5 placeholder:text-gray-400"
+              onBlur={e => saveName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') saveName((e.target as HTMLInputElement).value)
+                if (e.key === 'Escape') setIsEditingName(false)
+              }}
+            />
+          ) : (
+            <button
+              onClick={() => setIsEditingName(true)}
+              className="group/name flex items-center gap-1 text-left w-full"
+            >
+              {name ? (
+                <span className="text-[11px] font-medium text-gray-900 leading-snug truncate">{name}</span>
+              ) : (
+                <span className="text-[11px] text-gray-400 leading-snug">Add a name…</span>
+              )}
+              <Pencil className="h-2.5 w-2.5 text-gray-300 group-hover/name:text-gray-500 shrink-0 transition-colors" />
+            </button>
+          )}
+
           {/* Prompt */}
-          <p className="text-[11px] text-gray-700 leading-snug line-clamp-2 min-h-[2.4em]">{label}</p>
+          <p className="text-[11px] text-gray-500 leading-snug line-clamp-2">{label}</p>
 
           {/* Action buttons */}
           <div className="flex gap-1.5">

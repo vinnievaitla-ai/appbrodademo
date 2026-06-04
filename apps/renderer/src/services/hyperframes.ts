@@ -149,11 +149,11 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
     found = true
   }
 
-  // Fallback: Claude used id="stage" but forgot data-composition-id="variant".
+  // Fallback: Claude used id="stage" (double or single quotes) but forgot data-composition-id="variant".
   // Patch the existing element rather than wrapping the whole document (which creates malformed HTML).
-  if (!found && html.includes('id="stage"')) {
+  if (!found && /\bid\s*=\s*["']stage["']/.test(html)) {
     html = html.replace(
-      /(<[^>]+\bid="stage"[^>]*)>/,
+      /(<[^>]+\bid\s*=\s*["']stage["'][^>]*)>/,
       (_, tagContent) => {
         let out = tagContent
         if (!out.includes('data-composition-id')) out += ' data-composition-id="variant"'
