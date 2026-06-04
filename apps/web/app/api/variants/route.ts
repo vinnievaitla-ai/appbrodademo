@@ -48,20 +48,18 @@ COMPOSITION RULES
    Stick to: solid colors, one simple linear-gradient per element, opacity, translate/scale/rotate transforms.
    Include all CSS inside a <style> block in <head>.
 
-6. Template video as base layer — when a template video URL is provided in the user message,
-   include it as the FIRST CHILD inside #stage at data-track-index="0":
+6. Stage background and overlay design:
+   The overlay is composited onto the template video in post using a colorkey filter —
+   pure black (#000000) pixels become transparent so the template video shows through.
 
-   <video src="[TEMPLATE_URL]" id="template-video"
-          data-start="0" data-duration="${durationSecs}" data-track-index="0"
-          style="position:absolute;top:0;left:0;width:1080px;height:1920px;object-fit:cover;"
-          muted playsinline></video>
-
-   Place ALL end card overlay content at data-track-index="1" or higher so it renders
-   on top of the video. The output video will show the template video playing underneath
-   your end card design.
-   ⚠ If no template URL is given, use a solid background color on #stage instead.
-   ⚠ NEVER add <audio> or any <img> elements.
-   ⚠ NEVER add a second <video> element — one template video only.
+   ⚠ The stage (#stage) background MUST be exactly #000000 (pure black). Set it via:
+     body { background: #000000; }
+     #stage { background: #000000; }
+   ⚠ NEVER use black or near-black (any color where R<30 AND G<30 AND B<30) for any
+     visible element — text, buttons, icons, shadows, borders, or shapes. Use white,
+     bright colors, or light shades. Dark navy, dark red, dark green are all fine as
+     long as one channel exceeds 30. Pure black text/shadows will disappear.
+   ⚠ NEVER include <video>, <audio>, or <img> elements.
 
 ════════════════════════════════════════
 FONTS — CRITICAL
@@ -116,8 +114,9 @@ export async function POST(request: NextRequest) {
 
   if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 })
 
-  // Get template URL for context if provided
+  // Get template metadata for context and compositing
   let templateContext = ''
+  let templateFileUrl: string | undefined
   if (templateId) {
     const { data: template } = await supabase
       .from('templates')
@@ -125,7 +124,8 @@ export async function POST(request: NextRequest) {
       .eq('id', templateId)
       .single()
     if (template) {
-      templateContext = `\n\nTemplate video:\n- Name: "${template.name}"\n- URL: ${template.file_url}\n- Duration: ${durationSecs}s\n\nInclude this video as the base layer at data-track-index="0" following rule 6. Your end card design goes on top at data-track-index="1"+. The final render will show the template video playing behind your end card elements.`
+      templateFileUrl = template.file_url
+      templateContext = `\n\nTemplate video context: "${template.name}" — ${durationSecs}s vertical video.\nYour overlay will be composited on top of this video in post. Black background areas in your composition become transparent (showing the video underneath). All text, buttons, and visible elements must be non-black so they appear on top of the video.`
     }
   }
 
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
     const rendererRes = await fetch(`${rendererUrl}/render`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${rendererSecret}` },
-      body: JSON.stringify({ jobId: job.id, htmlContent, duration: durationSecs }),
+      body: JSON.stringify({ jobId: job.id, htmlContent, duration: durationSecs, templateUrl: templateFileUrl }),
     })
     if (!rendererRes.ok) {
       const text = await rendererRes.text().catch(() => rendererRes.status.toString())

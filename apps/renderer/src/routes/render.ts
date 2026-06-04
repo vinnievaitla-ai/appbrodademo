@@ -13,10 +13,11 @@ router.post('/render', (req: Request, res: Response) => {
     return
   }
 
-  const { jobId, htmlContent, duration } = req.body as {
+  const { jobId, htmlContent, duration, templateUrl } = req.body as {
     jobId: string
     htmlContent: string
     duration?: number
+    templateUrl?: string
   }
 
   if (!jobId || !htmlContent) {
@@ -32,7 +33,7 @@ router.post('/render', (req: Request, res: Response) => {
     try {
       await updateJobStatus(jobId, { status: 'processing' })
 
-      const outputPath = await renderComposition(htmlContent, jobId, duration)
+      const outputPath = await renderComposition(htmlContent, jobId, duration, templateUrl)
       const publicUrl = await uploadGeneratedVariant(outputPath, jobId)
 
       await updateJobStatus(jobId, {

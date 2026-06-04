@@ -136,69 +136,67 @@ function sanitizeHtml(html: string, defaultDuration = 3): string {
   return html
 }
 
-// ─── Template video pre-processing ──────────────────────────────────────────
+// ─── Post-render FFmpeg compositing ──────────────────────────────────────────
 //
-// Chrome OOMs when HyperFrames tries to seek through a full-resolution 1080×1920
-// video during frame capture. Fix: download the template video and resize it to
-// 540×960 before passing to HyperFrames. CSS `object-fit:cover` scales it back up
-// to fill the stage, so the rendered output is still 1080×1920. Chrome's video
-// decoder uses 4× less RAM at 540×960 vs 1080×1920.
+// Including <video> in the HyperFrames HTML causes Chrome headless to OOM at
+// 15–19 frames even at half resolution (540×960), because the video decoder keeps
+// decoded frame buffers in memory across every seek-and-capture cycle.
 //
-// We also use a dense keyframe interval (-g 8 at 30 fps ≈ one keyframe every 0.27 s)
-// so HyperFrames can seek accurately to every 4-fps capture point without Chrome
-// needing to decode a long GOP to find the right frame.
+// Architecture instead:
+//   1. HyperFrames renders the CSS overlay on a pure-black stage (no <video> element)
+//   2. FFmpeg composites the overlay onto the template video using colorkey:
+//        colorkey=0x000000 → black pixels in the overlay become transparent
+//      The template video plays at its original quality and fps underneath.
+//
+// Design contract with Claude (enforced in system prompt):
+//   - Stage background: #000000 (becomes transparent after colorkey)
+//   - All visible elements: non-black (R>30 or G>30 or B>30)
 
-async function localizeTemplateVideo(html: string, jobDir: string): Promise<string> {
-  // Find the first <video> with a remote http URL
-  const videoTagMatch = html.match(/<video\b[^>]+>/i)
-  if (!videoTagMatch) return html
-  const srcMatch = videoTagMatch[0].match(/\bsrc\s*=\s*["'](https?:\/\/[^"']+)["']/i)
-  if (!srcMatch) return html
+async function compositeWithTemplate(
+  overlayPath: string,
+  templateUrl: string,
+  finalPath: string,
+  durationSecs: number
+): Promise<void> {
+  const templatePath = overlayPath.replace('-overlay.mp4', '-template.mp4')
 
-  const remoteUrl = srcMatch[1]
-  const rawPath  = path.join(jobDir, 'template-raw.mp4')
-  const smallPath = path.join(jobDir, 'template-sm.mp4')
+  const res = await fetch(templateUrl, { signal: AbortSignal.timeout(90_000) })
+  if (!res.ok) throw new Error(`Template download failed: ${res.status}`)
+  fs.writeFileSync(templatePath, Buffer.from(await res.arrayBuffer()))
 
-  try {
-    // Download
-    const res = await fetch(remoteUrl, { signal: AbortSignal.timeout(90_000) })
-    if (!res.ok) throw new Error(`Download failed: ${res.status}`)
-    fs.writeFileSync(rawPath, Buffer.from(await res.arrayBuffer()))
-
-    // Resize to 540×960 with dense keyframes
-    execSync(
-      `ffmpeg -y -i "${rawPath}" -vf "scale=540:960:flags=bilinear" ` +
-      `-c:v libx264 -preset ultrafast -crf 23 -g 8 -keyint_min 8 -an "${smallPath}"`,
-      { timeout: 120_000, stdio: 'pipe' }
-    )
-
-    return html.replace(remoteUrl, 'template-sm.mp4')
-  } catch (err: any) {
-    console.warn('[hyperframes] Video pre-processing failed, falling back to remote URL:', err.message)
-    return html
-  }
+  // colorkey removes pure-black pixels (overlay background) exposing the template video.
+  // overlay=shortest=1 stops when the shorter stream ends (handles duration mismatches).
+  execSync(
+    `ffmpeg -y -i "${templatePath}" -i "${overlayPath}" ` +
+    `-filter_complex ` +
+    `"[0:v]scale=1080:1920,setsar=1[bg];` +
+    `[1:v]scale=1080:1920,setsar=1,colorkey=0x000000:0.15:0.05[fg];` +
+    `[bg][fg]overlay=shortest=1[out]" ` +
+    `-map "[out]" -t ${durationSecs} "${finalPath}"`,
+    { timeout: 300_000, stdio: 'pipe' }
+  )
 }
 
-export async function renderComposition(htmlContent: string, jobId: string, durationSecs = 3): Promise<string> {
+export async function renderComposition(
+  htmlContent: string,
+  jobId: string,
+  durationSecs = 3,
+  templateUrl?: string
+): Promise<string> {
   const jobDir = path.join(TMP_DIR, jobId)
-  const outputPath = path.join(TMP_DIR, `${jobId}.mp4`)
+  // When compositing, HyperFrames writes the overlay to a side file; FFmpeg produces the final.
+  const overlayPath = templateUrl
+    ? path.join(TMP_DIR, `${jobId}-overlay.mp4`)
+    : path.join(TMP_DIR, `${jobId}.mp4`)
+  const finalPath = path.join(TMP_DIR, `${jobId}.mp4`)
 
   fs.mkdirSync(jobDir, { recursive: true })
 
-  // If the HTML embeds a remote template video, download + resize it to 540×960
-  // so Chrome's decoder stays within the container's memory budget.
-  const processedHtml = await localizeTemplateVideo(htmlContent, jobDir)
-
   // Pass durationSecs so the sanitizer uses it as the data-duration fallback AND
   // always overwrites whatever Claude generated to match the intended composition length.
-  fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(processedHtml, durationSecs), 'utf-8')
+  fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent, durationSecs), 'utf-8')
 
-  // fps is chosen to keep total frames ≤ 45 (safe for simple CSS + video compositing).
-  // OOM data points:
-  //   Simple text overlay (CSS only): ~45 frames ✓
-  //   Tiled radial-gradient CSS (halftone): crashes at ~28 frames ✗  → banned in prompt
-  //   Video + simple overlay: video decoder uses GPU-cached frames, not per-pixel CSS
-  //     gradient computation, so 45-frame budget should hold at 540×960 input.
+  // CSS-only overlay: safe up to 45 frames (simple text/shapes, no video element).
   // Formula: min(15, max(4, round(45 / duration)))
   //   3 s → 15 fps (45 frames)
   //   5 s →  9 fps (45 frames)
@@ -206,14 +204,20 @@ export async function renderComposition(htmlContent: string, jobId: string, dura
   const fps = Math.min(15, Math.max(4, Math.round(45 / durationSecs)))
 
   execSync(
-    `npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft --fps ${fps}`,
+    `npx hyperframes render ${jobDir} -o ${overlayPath} --workers 1 --quality draft --fps ${fps}`,
     { timeout: 300_000, stdio: 'pipe' }
   )
 
-  return outputPath
+  if (templateUrl) {
+    await compositeWithTemplate(overlayPath, templateUrl, finalPath, durationSecs)
+  }
+
+  return finalPath
 }
 
 export function cleanupTmp(jobId: string) {
   try { fs.rmSync(path.join(TMP_DIR, jobId), { recursive: true, force: true }) } catch {}
-  try { fs.unlinkSync(path.join(TMP_DIR, `${jobId}.mp4`)) } catch {}
+  for (const suffix of ['.mp4', '-overlay.mp4', '-template.mp4']) {
+    try { fs.unlinkSync(path.join(TMP_DIR, jobId) + suffix) } catch {}
+  }
 }
