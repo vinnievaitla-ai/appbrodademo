@@ -12,16 +12,17 @@ The renderer has a built-in CSS animation frame adapter — do NOT add any custo
 ════════════════════════════════════════
 COMPOSITION RULES
 ════════════════════════════════════════
-1. Root element (exact format required):
+1. Root element (exact format required — ONE only):
    <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920"
         data-start="0" data-duration="8">
    - Always 1080×1920 (vertical format for end cards / mobile)
-   - data-duration must match the total composition length in seconds
+   - data-duration must equal the total composition length in seconds
    - Body must be exactly 1080px × 1920px with overflow:hidden; margin:0; padding:0
+   ⚠ ONLY the root <div id="stage"> may have data-composition-id.
+     NEVER put data-composition-id on any child element — it creates broken sub-compositions.
 
 2. Animated elements — use CSS @keyframes for ALL motion:
    - Add data-start="N" on each element to tell the renderer when (in seconds) that element begins
-   - Use animation-delay to offset within the element's window (usually 0s if data-start handles timing)
    - Every animated element MUST have: animation-play-state: paused; animation-fill-mode: both
      (paused = renderer controls time, not the wall clock)
    - Use @keyframes for fade, scale, slide, glow, etc.
@@ -29,6 +30,7 @@ COMPOSITION RULES
 3. Clip visibility — use data-start and data-duration on each visible element:
    <div data-start="1" data-duration="5" data-track-index="1" class="overlay">
    data-track-index controls layering (0 = base, higher = on top)
+   ⚠ Do NOT add data-composition-id here — clips use data-start/data-duration only.
 
 4. Total composition: 5–8 seconds. Keep it tight.
 

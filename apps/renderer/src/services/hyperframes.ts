@@ -5,25 +5,41 @@ import * as path from 'path'
 const TMP_DIR = path.join(process.cwd(), 'tmp')
 
 // HyperFrames computes window.__hf.duration via this chain:
-//   bridge.getDuration() = p.getDuration() > 0 ? p.getDuration() : getDeclaredDuration()
+//   bridge: window.__hf.duration = p.getDuration() > 0 ? p.getDuration() : getDeclaredDuration()
 //   getDeclaredDuration() reads data-duration from the [data-composition-id] root element
 //
-// The runtime player (p) returns getDuration()=0 when generated HTML has no clip
-// data-duration attributes (CSS-animation-only compositions). So we must ensure the
-// root element always has data-duration — otherwise window.__hf.duration stays 0
-// and FrameCapture times out after 45 s.
+// Fix 1 – ensureDataDuration: generated HTML often has no data-duration on the root element,
+//   causing getDeclaredDuration()=0 → window.__hf.duration=0 → 45-second FrameCapture timeout.
 //
-// The HyperFrames runtime also has a built-in CSS frame adapter that seeks
-// CSS animations via animation.currentTime, so no additional seek injection is needed.
-function ensureDataDuration(html: string, defaultSeconds = 8): string {
-  // Add data-duration to the [data-composition-id] element if it's missing.
-  return html.replace(
-    /(<(?:div|section|article|main|span)[^>]*\bdata-composition-id="[^"]*"[^>]*?)(\s*>)/,
-    (match, prefix, close) => {
-      if (/\bdata-duration\b/.test(prefix)) return match
-      return `${prefix} data-duration="${defaultSeconds}"${close}`
+// Fix 2 – stripExtraCompositionIds: any element besides the root that has data-composition-id
+//   is treated as a "sub-composition" and HyperFrames waits 45 s for its timeline to be
+//   registered in window.__timelines[id], which never happens → timeout.
+//   Strip those attributes server-side so only the root keeps data-composition-id.
+
+function sanitizeHtml(html: string, defaultDuration = 8): string {
+  let found = false
+
+  // Pass 1 – ensure root element has data-duration, strip data-composition-id from all others
+  html = html.replace(
+    /(<(?:div|section|article|main|span)(\s[^>]*)?>)/g,
+    (match, _full, attrs = '') => {
+      if (!attrs.includes('data-composition-id')) return match
+
+      if (!found) {
+        // This is the root — keep data-composition-id, ensure data-duration is present
+        found = true
+        if (!attrs.includes('data-duration')) {
+          return match.replace('>', ` data-duration="${defaultDuration}">`)
+        }
+        return match
+      }
+
+      // Non-root element — strip data-composition-id to prevent sub-composition error
+      return match.replace(/\s*data-composition-id="[^"]*"/, '')
     }
   )
+
+  return html
 }
 
 export function renderComposition(htmlContent: string, jobId: string): string {
@@ -31,7 +47,7 @@ export function renderComposition(htmlContent: string, jobId: string): string {
   const outputPath = path.join(TMP_DIR, `${jobId}.mp4`)
 
   fs.mkdirSync(jobDir, { recursive: true })
-  fs.writeFileSync(path.join(jobDir, 'index.html'), ensureDataDuration(htmlContent), 'utf-8')
+  fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent), 'utf-8')
 
   execSync(`npx hyperframes render ${jobDir} -o ${outputPath}`, {
     timeout: 300_000,
