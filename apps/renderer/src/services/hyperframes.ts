@@ -226,13 +226,16 @@ async function compositeWithTemplate(
 
   // colorkey removes pure-black pixels (overlay background) exposing the template video.
   // overlay=shortest=1 stops when the shorter stream ends (handles duration mismatches).
+  //
+  // -threads 4: cap parallelism so HEVC decode + colorkey (ARGB) + H.264 encode don't
+  // collectively exhaust the 512 MB container limit (default spawns 60+ threads → OOM kill).
   execSync(
-    `ffmpeg -y -i "${templatePath}" -i "${overlayPath}" ` +
+    `ffmpeg -threads 4 -y -i "${templatePath}" -i "${overlayPath}" ` +
     `-filter_complex ` +
     `"[0:v]scale=1080:1920,setsar=1[bg];` +
     `[1:v]scale=1080:1920,setsar=1,colorkey=0x000000:0.15:0.05[fg];` +
     `[bg][fg]overlay=shortest=1[out]" ` +
-    `-map "[out]" -t ${durationSecs} "${finalPath}"`,
+    `-map "[out]" -threads 4 -t ${durationSecs} "${finalPath}"`,
     { timeout: 300_000, stdio: 'pipe' }
   )
 }

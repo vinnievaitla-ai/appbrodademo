@@ -193,7 +193,7 @@ export function VariantCard({ id, prompt, outputUrl, onDelete }: VariantCardProp
             <button
               onClick={handleDelete}
               disabled={isDeleting}
-              className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40"
+              className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 text-red-500 hover:text-red-600 transition-colors disabled:opacity-40"
               title="Delete"
             >
               <Trash2 className="h-3 w-3" />
