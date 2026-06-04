@@ -1,6 +1,6 @@
 'use client'
 
-import { FolderOpen, Film, MoreHorizontal, Sparkles } from 'lucide-react'
+import { FolderOpen, Film, Sparkles } from 'lucide-react'
 import type { RenderJob } from '@/lib/types'
 import { formatRelativeDate } from '@/lib/utils'
 
@@ -33,47 +33,42 @@ export function FolderCard({
   return (
     <div
       onClick={onClick}
-      className="group bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer overflow-hidden flex flex-col"
+      className="group bg-white rounded-[28px] border border-[#EFEBE4] shadow-[0_6px_22px_rgba(40,28,18,0.06)] hover:shadow-[0_18px_50px_rgba(40,28,18,0.10)] hover:-translate-y-1 transition-all duration-200 cursor-pointer overflow-hidden flex flex-col"
     >
       {/* Header */}
-      <div className="p-4 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-              isUntagged ? 'bg-gray-100' : 'bg-blue-50'
-            }`}>
-              <FolderOpen className={`h-4 w-4 ${isUntagged ? 'text-gray-400' : 'text-blue-500'}`} />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-semibold text-gray-900 text-sm leading-tight truncate">{name}</h3>
-              {isUntagged && (
-                <p className="text-[11px] text-gray-400 mt-0.5">Unorganized assets</p>
-              )}
-            </div>
+      <div className="p-5 flex-1">
+        <div className="flex items-center gap-3">
+          {/* Circular outlined icon badge */}
+          <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 border ${
+            isUntagged
+              ? 'bg-white border-[#E7E2DB]'
+              : 'bg-[#F8E5DD] border-transparent'
+          }`}>
+            <FolderOpen className={`h-5 w-5 ${isUntagged ? 'text-[#ABA49B]' : 'text-[#E2623F]'}`} />
           </div>
-          <button
-            onClick={e => e.stopPropagation()}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all shrink-0"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
+          <div className="min-w-0">
+            <h3 className="font-bold text-[#1C1A18] text-[16px] leading-tight truncate">{name}</h3>
+            {isUntagged && (
+              <p className="text-[12px] text-[#ABA49B] mt-0.5">Unorganized assets</p>
+            )}
+          </div>
         </div>
 
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-4 space-y-1">
           <div className="flex items-center gap-1.5">
-            <Film className="h-3 w-3 text-gray-400 shrink-0" />
-            <span className="text-[12px] text-gray-600 font-medium">
+            <Film className="h-3.5 w-3.5 text-[#ABA49B] shrink-0" />
+            <span className="text-[13px] text-[#46413B] font-semibold">
               {count === 0 ? 'No videos' : `${count} video${count !== 1 ? 's' : ''}`}
             </span>
             {pendingCount > 0 && (
-              <span className="flex items-center gap-1 text-[11px] text-blue-500 font-medium">
+              <span className="flex items-center gap-1 text-[11px] text-[#E2623F] font-medium">
                 <Sparkles className="h-2.5 w-2.5 animate-pulse" />
                 {pendingCount} rendering
               </span>
             )}
           </div>
           {lastModified && (
-            <p className="text-[11px] text-gray-400 pl-[18px]">
+            <p className="text-[12px] text-[#ABA49B] pl-5">
               Updated {formatRelativeDate(lastModified)}
             </p>
           )}
@@ -81,11 +76,11 @@ export function FolderCard({
       </div>
 
       {/* Thumbnail strip */}
-      <div className="border-t border-gray-100">
+      <div className="border-t border-[#EFEBE4]">
         {thumbnails.length > 0 ? (
-          <div className="flex gap-px bg-gray-100" style={{ height: '80px' }}>
+          <div className="flex gap-px bg-[#F1EEE9]" style={{ height: '80px' }}>
             {thumbnails.map((url, i) => (
-              <div key={i} className="flex-1 overflow-hidden bg-gray-200 relative">
+              <div key={i} className="flex-1 overflow-hidden bg-[#E7E3DC] relative">
                 <video
                   src={url}
                   className="absolute inset-0 w-full h-full object-cover"
@@ -95,14 +90,14 @@ export function FolderCard({
               </div>
             ))}
             {count > 4 && (
-              <div className="w-12 bg-gray-800/70 flex items-center justify-center shrink-0">
+              <div className="w-12 bg-[#1C1A18] flex items-center justify-center shrink-0">
                 <span className="text-[11px] font-bold text-white">+{count - 4}</span>
               </div>
             )}
           </div>
         ) : (
-          <div className="flex items-center justify-center bg-gray-50" style={{ height: '64px' }}>
-            <p className="text-[11px] text-gray-400">No videos yet</p>
+          <div className="flex items-center justify-center bg-[#F1EEE9]" style={{ height: '64px' }}>
+            <p className="text-[11px] text-[#ABA49B]">No videos yet</p>
           </div>
         )}
       </div>

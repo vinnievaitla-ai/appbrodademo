@@ -13,7 +13,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
-  ChevronDown, Search, Loader2, Sparkles, Upload, FolderPlus, Plus,
+  ChevronDown, Search, Loader2, Sparkles, Upload, FolderPlus, Plus, ArrowRight,
 } from 'lucide-react'
 import type { Template, RenderJob, Folder } from '@/lib/types'
 import {
@@ -30,8 +30,8 @@ interface SelectedTemplate { id: string; name: string; fileUrl: string }
 function NewFolderInput({ onSave, onCancel }: { onSave: (name: string) => void; onCancel: () => void }) {
   const [name, setName] = useState('')
   return (
-    <div className="flex items-center gap-2 px-6 py-3 bg-blue-50 border-b border-blue-100">
-      <FolderPlus className="h-4 w-4 text-blue-500 shrink-0" />
+    <div className="flex items-center gap-2 px-6 py-3 bg-[#F8E5DD] border-b border-[#E2623F]/20">
+      <FolderPlus className="h-4 w-4 text-[#E2623F] shrink-0" />
       <input
         autoFocus
         value={name}
@@ -41,16 +41,16 @@ function NewFolderInput({ onSave, onCancel }: { onSave: (name: string) => void; 
           if (e.key === 'Escape') onCancel()
         }}
         placeholder="Folder name…"
-        className="flex-1 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 outline-none font-medium"
+        className="flex-1 bg-transparent text-sm text-[#1C1A18] placeholder:text-[#ABA49B] outline-none font-semibold"
       />
       <button
         onClick={() => name.trim() && onSave(name.trim())}
         disabled={!name.trim()}
-        className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-xs font-semibold rounded-lg transition-colors"
+        className="px-3 py-1 bg-[#E2623F] hover:bg-[#CF5331] disabled:opacity-40 text-white text-xs font-semibold rounded-full transition-colors"
       >
         Create
       </button>
-      <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 text-xs">Cancel</button>
+      <button onClick={onCancel} className="text-[#ABA49B] hover:text-[#46413B] text-xs font-medium">Cancel</button>
     </div>
   )
 }
@@ -223,7 +223,8 @@ export function LibraryPage() {
   }, [view, folders])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-[#E9E6E1] p-[22px]">
+      <div className="flex flex-1 min-w-0 overflow-hidden rounded-[28px] border border-[#EFEBE4] bg-[#FBFAF8] shadow-[0_18px_50px_rgba(40,28,18,0.10)]">
       {/* Left sidebar */}
       <Sidebar
         view={view}
@@ -248,16 +249,16 @@ export function LibraryPage() {
 
         {/* Contextual page header */}
         {view.type !== 'folder-workspace' && (
-          <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
+          <div className="bg-[#FBFAF8] border-b border-[#E7E2DB] px-8 py-5 shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-[17px] font-bold text-gray-900 leading-tight">
+                <h1 className="text-[20px] font-bold text-[#1C1A18] leading-tight">
                   {view.type === 'templates'
-                    ? <>My Library <span className="text-gray-300 mx-1.5 font-light">·</span> <span className="text-blue-600">{categoryLabel}</span></>
-                    : <span className="text-gray-900">Generated Variants</span>
+                    ? <>My Library <span className="text-[#C7C1B8] mx-2 font-light">·</span> <span className="text-[#E2623F]">{categoryLabel}</span></>
+                    : <span className="text-[#1C1A18]">Generated Variants</span>
                   }
                 </h1>
-                <p className="text-[12px] text-gray-400 mt-0.5 font-medium">
+                <p className="text-[13px] text-[#8B847C] mt-1 font-medium">
                   {view.type === 'templates'
                     ? 'Manage templates and generate AI-powered ad variants'
                     : 'Organize your AI-generated video variants in folders'
@@ -270,13 +271,13 @@ export function LibraryPage() {
                 {view.type === 'folder-grid' && (
                   <button
                     onClick={handleNewFolder}
-                    className="flex items-center gap-1.5 h-9 px-3 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                    className="flex items-center gap-1.5 h-10 px-4 text-sm font-semibold text-[#46413B] border border-[#E7E2DB] rounded-full hover:bg-[#F1EEE9] transition-colors"
                   >
                     <FolderPlus className="h-3.5 w-3.5" /> New Folder
                   </button>
                 )}
                 <DropdownMenu>
-                  <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white h-9 px-4 text-sm font-semibold transition-colors shadow-sm shadow-blue-200">
+                  <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-full bg-[#E2623F] hover:bg-[#CF5331] text-white h-10 px-5 text-sm font-semibold transition-colors shadow-[0_4px_14px_rgba(226,98,63,0.30)]">
                     {isUploading
                       ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
                       : <><Plus className="h-3.5 w-3.5" /> <span>Create</span> <ChevronDown className="h-3.5 w-3.5 opacity-70" /></>
@@ -284,10 +285,10 @@ export function LibraryPage() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="cursor-pointer">
-                      <Upload className="h-3.5 w-3.5 mr-2 text-gray-400" /> Upload Template
+                      <Upload className="h-3.5 w-3.5 mr-2 text-[#ABA49B]" /> Upload Template
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => openGenerateModal()} className="cursor-pointer">
-                      <Sparkles className="h-3.5 w-3.5 mr-2 text-blue-500" /> Generate Variant
+                      <Sparkles className="h-3.5 w-3.5 mr-2 text-[#E2623F]" /> Generate Variant
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -296,13 +297,13 @@ export function LibraryPage() {
 
             {/* Search (templates view only) */}
             {view.type === 'templates' && (
-              <div className="mt-3 relative w-56">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+              <div className="mt-4 relative w-64">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#ABA49B]" />
                 <input
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Search templates…"
-                  className="pl-7 pr-3 py-1.5 text-[12px] border border-gray-200 rounded-lg w-full focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white"
+                  className="pl-9 pr-4 py-2.5 text-[13px] border border-[#E7E2DB] rounded-full w-full focus:outline-none focus:ring-2 focus:ring-[#E2623F]/20 focus:border-[#E2623F] bg-white text-[#1C1A18] placeholder:text-[#ABA49B] font-medium"
                 />
               </div>
             )}
@@ -326,8 +327,8 @@ export function LibraryPage() {
             {isLoading && view.type === 'templates' ? (
               <div className="flex items-center justify-center flex-1">
                 <div className="flex flex-col items-center gap-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-                  <span className="text-xs text-gray-400 font-medium">Loading…</span>
+                  <Loader2 className="h-5 w-5 animate-spin text-[#E2623F]" />
+                  <span className="text-xs text-[#ABA49B] font-medium">Loading…</span>
                 </div>
               </div>
 
@@ -338,24 +339,24 @@ export function LibraryPage() {
                 {/* Templates section */}
                 <section>
                   <div className="flex items-center gap-3 mb-4">
-                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Templates</h2>
+                    <h2 className="text-[11px] font-bold text-[#ABA49B] uppercase tracking-wider">Templates</h2>
                     {filteredTemplates.length > 0 && (
-                      <span className="h-4 min-w-4 px-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 flex items-center justify-center">
+                      <span className="h-5 min-w-5 px-1.5 rounded-full bg-[#E7E3DC] text-[11px] font-bold text-[#46413B] flex items-center justify-center">
                         {filteredTemplates.length}
                       </span>
                     )}
-                    <div className="flex-1 h-px bg-gray-100" />
+                    <div className="flex-1 h-px bg-[#E7E2DB]" />
                   </div>
                   {filteredTemplates.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-gray-200 rounded-2xl text-center bg-white/50">
-                      <div className="h-10 w-10 rounded-xl bg-gray-100 flex items-center justify-center mb-3">
-                        <Upload className="h-5 w-5 text-gray-400" />
+                    <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-[#E7E2DB] rounded-[22px] text-center bg-[#F1EEE9]/40">
+                      <div className="h-10 w-10 rounded-full bg-white border border-[#E7E2DB] flex items-center justify-center mb-3">
+                        <Upload className="h-5 w-5 text-[#ABA49B]" />
                       </div>
-                      <p className="text-sm font-semibold text-gray-700 mb-1">No templates yet</p>
-                      <p className="text-xs text-gray-400 mb-4">Upload your first {categoryLabel} template to get started</p>
+                      <p className="text-sm font-bold text-[#1C1A18] mb-1">No templates yet</p>
+                      <p className="text-xs text-[#8B847C] mb-4">Upload your first {categoryLabel} template to get started</p>
                       <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                        className="px-4 py-2 bg-[#E2623F] hover:bg-[#CF5331] text-white text-xs font-semibold rounded-full transition-colors shadow-[0_4px_14px_rgba(226,98,63,0.25)]"
                       >
                         Upload Template
                       </button>
@@ -375,39 +376,39 @@ export function LibraryPage() {
                 {/* Generated Variants — folder grid inline below templates */}
                 <section>
                   <div className="flex items-center gap-3 mb-4">
-                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Generated Variants</h2>
+                    <h2 className="text-[11px] font-bold text-[#ABA49B] uppercase tracking-wider">Generated Variants</h2>
                     {(folders.length > 0 || variantCounts['untagged'] > 0) && (
-                      <span className="h-4 min-w-4 px-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 flex items-center justify-center">
+                      <span className="h-5 min-w-5 px-1.5 rounded-full bg-[#E7E3DC] text-[11px] font-bold text-[#46413B] flex items-center justify-center">
                         {folders.length + (variantCounts['untagged'] > 0 ? 1 : 0)}
                       </span>
                     )}
-                    <div className="flex-1 h-px bg-gray-100" />
+                    <div className="flex-1 h-px bg-[#E7E2DB]" />
                     <button
                       onClick={() => setView({ type: 'folder-grid' })}
-                      className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold shrink-0"
+                      className="text-[12px] text-[#E2623F] hover:text-[#CF5331] font-semibold shrink-0 flex items-center gap-1"
                     >
-                      View all →
+                      View all <ArrowRight className="h-3 w-3" />
                     </button>
                   </div>
 
                   {/* Pending banner */}
                   {pendingJobIds.length > 0 && (
-                    <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
-                      <Sparkles className="h-4 w-4 text-blue-500 animate-pulse shrink-0" />
-                      <p className="text-[13px] text-blue-800 font-semibold flex-1">
+                    <div className="mb-4 flex items-center gap-3 bg-[#F8E5DD] border border-[#E2623F]/20 rounded-[14px] px-4 py-2.5">
+                      <Sparkles className="h-4 w-4 text-[#E2623F] animate-pulse shrink-0" />
+                      <p className="text-[13px] text-[#B8451F] font-semibold flex-1">
                         {pendingJobIds.length} variant{pendingJobIds.length !== 1 ? 's' : ''} rendering…
                       </p>
                     </div>
                   )}
 
                   {folders.length === 0 && variantCounts['untagged'] === 0 && pendingJobIds.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-blue-100 rounded-2xl text-center bg-blue-50/20">
-                      <Sparkles className="h-6 w-6 text-blue-400 mb-2" />
-                      <p className="text-sm font-semibold text-gray-600 mb-1">No generated variants yet</p>
-                      <p className="text-xs text-gray-400 mb-3">Select a template and click Generate</p>
+                    <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-[#E7E2DB] rounded-[22px] text-center bg-[#F8E5DD]/20">
+                      <Sparkles className="h-6 w-6 text-[#E2623F] mb-2" />
+                      <p className="text-sm font-bold text-[#1C1A18] mb-1">No generated variants yet</p>
+                      <p className="text-xs text-[#8B847C] mb-3">Select a template and click Generate</p>
                       <button
                         onClick={() => openGenerateModal()}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                        className="px-3 py-1.5 bg-[#E2623F] hover:bg-[#CF5331] text-white text-xs font-semibold rounded-full transition-colors flex items-center gap-1.5 shadow-[0_4px_14px_rgba(226,98,63,0.25)]"
                       >
                         <Sparkles className="h-3 w-3" /> Generate Variant
                       </button>
@@ -446,19 +447,19 @@ export function LibraryPage() {
               <div className="flex-1 overflow-y-auto px-6 py-6">
                 {/* Pending rendering banner */}
                 {pendingJobIds.length > 0 && (
-                  <div className="mb-5 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-                    <Sparkles className="h-4 w-4 text-blue-500 animate-pulse shrink-0" />
+                  <div className="mb-5 flex items-center gap-3 bg-[#F8E5DD] border border-[#E2623F]/20 rounded-[14px] px-4 py-3">
+                    <Sparkles className="h-4 w-4 text-[#E2623F] animate-pulse shrink-0" />
                     <div className="flex-1">
-                      <p className="text-[13px] text-blue-800 font-semibold">
+                      <p className="text-[13px] text-[#B8451F] font-semibold">
                         {pendingJobIds.length} variant{pendingJobIds.length !== 1 ? 's' : ''} rendering
                       </p>
-                      <p className="text-[11px] text-blue-500 mt-0.5">
+                      <p className="text-[11px] text-[#E2623F]/70 mt-0.5">
                         They'll be saved to a folder when complete
                       </p>
                     </div>
                     <div className="flex gap-px">
                       {pendingJobIds.slice(0, 3).map((_, i) => (
-                        <div key={i} className={`h-1.5 w-5 rounded-full bg-blue-300 animate-pulse`}
+                        <div key={i} className="h-1.5 w-5 rounded-full bg-[#E2623F]/40 animate-pulse"
                           style={{ animationDelay: `${i * 200}ms` }} />
                       ))}
                     </div>
@@ -467,15 +468,15 @@ export function LibraryPage() {
 
                 {/* Folder grid */}
                 {folders.length === 0 && variantCounts['untagged'] === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-blue-100 rounded-2xl text-center bg-blue-50/20">
-                    <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center mb-3">
-                      <Sparkles className="h-6 w-6 text-blue-500" />
+                  <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-[#E7E2DB] rounded-[22px] text-center bg-[#F8E5DD]/20">
+                    <div className="h-12 w-12 rounded-full bg-[#F8E5DD] border border-transparent flex items-center justify-center mb-3">
+                      <Sparkles className="h-6 w-6 text-[#E2623F]" />
                     </div>
-                    <p className="text-sm font-semibold text-gray-700 mb-1">No variants generated yet</p>
-                    <p className="text-xs text-gray-400 mb-5">Select a template and generate your first AI-powered variant</p>
+                    <p className="text-sm font-bold text-[#1C1A18] mb-1">No variants generated yet</p>
+                    <p className="text-xs text-[#8B847C] mb-5">Select a template and generate your first AI-powered variant</p>
                     <button
                       onClick={() => openGenerateModal()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm flex items-center gap-1.5"
+                      className="px-4 py-2 bg-[#E2623F] hover:bg-[#CF5331] text-white text-xs font-semibold rounded-full transition-colors shadow-[0_4px_14px_rgba(226,98,63,0.25)] flex items-center gap-1.5"
                     >
                       <Sparkles className="h-3.5 w-3.5" /> Generate Variant
                     </button>
@@ -557,6 +558,7 @@ export function LibraryPage() {
         onClose={() => { setShowFolderPicker(false); setJustCompletedIds([]) }}
         onAssigned={updatedFolders => setFolders(updatedFolders)}
       />
+      </div>
     </div>
   )
 }

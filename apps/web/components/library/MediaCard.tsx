@@ -148,7 +148,7 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, isGenerated, onDel
   return (
     <>
       <div
-        className="group w-[196px] rounded-xl border border-gray-200 bg-white overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-default"
+        className="group w-[196px] rounded-[22px] border border-[#EFEBE4] bg-white overflow-hidden transition-all duration-200 shadow-[0_2px_8px_rgba(40,28,18,0.05)] hover:shadow-[0_12px_32px_rgba(40,28,18,0.10)] hover:-translate-y-1 cursor-default"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -178,7 +178,7 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, isGenerated, onDel
 
           {/* Generated badge */}
           {isGenerated && (
-            <div className="absolute top-2 left-2 flex items-center gap-1 bg-blue-600/90 backdrop-blur-sm rounded-full px-2 py-0.5">
+            <div className="absolute top-2 left-2 flex items-center gap-1 bg-[#E2623F]/90 backdrop-blur-sm rounded-full px-2 py-0.5">
               <Sparkles className="h-2.5 w-2.5 text-white" />
               <span className="text-[9px] font-semibold text-white uppercase tracking-wide">HF</span>
             </div>
@@ -216,11 +216,11 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, isGenerated, onDel
           <div className="flex items-start justify-between gap-1.5">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <FileVideo className="h-3 w-3 text-gray-400 shrink-0 mt-px" />
-                <span className="text-[12px] font-medium text-gray-800 truncate leading-tight">{name}</span>
+                <FileVideo className="h-3 w-3 text-[#ABA49B] shrink-0 mt-px" />
+                <span className="text-[12px] font-semibold text-[#1C1A18] truncate leading-tight">{name}</span>
               </div>
               {size && (
-                <p className="text-[11px] text-gray-400 mt-0.5 pl-[18px]">MP4 · {size}</p>
+                <p className="text-[11px] text-[#ABA49B] mt-0.5 pl-[18px]" style={{fontFamily:"'DM Mono',monospace"}}>MP4 · {size}</p>
               )}
             </div>
 
@@ -244,7 +244,7 @@ export function MediaCard({ id, name, fileUrl, fileSizeBytes, isGenerated, onDel
                   )}
                   {onGenerate && (
                     <DropdownMenuItem className="cursor-pointer text-sm" onClick={() => onGenerate(id, name, fileUrl)}>
-                      <Sparkles className="h-3.5 w-3.5 mr-2 text-blue-500" />
+                      <Sparkles className="h-3.5 w-3.5 mr-2 text-[#E2623F]" />
                       Generate Variant
                     </DropdownMenuItem>
                   )}

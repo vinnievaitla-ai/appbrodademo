@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import {
   Anchor, User, Type, AudioWaveform, LayoutTemplate,
-  FolderOpen, Folder, FolderPlus, LayoutGrid,
+  Folder, FolderPlus, LayoutGrid,
   ChevronDown, ChevronRight, Pencil, Trash2,
 } from 'lucide-react'
 import type { Folder as FolderType } from '@/lib/types'
@@ -28,13 +28,13 @@ interface SidebarProps {
   folders: FolderType[]
   onFoldersChange: (f: FolderType[]) => void
   onNewFolder: () => void
-  variantCounts: Record<string, number>   // folderId → count; 'untagged' → count
+  variantCounts: Record<string, number>
 }
 
 function SectionLabel({ label, action }: { label: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-3 pt-5 pb-2">
-      <p className="text-[12px] font-bold text-gray-700 uppercase tracking-wider">{label}</p>
+      <p className="text-[11px] font-bold text-[#ABA49B] uppercase tracking-wider">{label}</p>
       {action}
     </div>
   )
@@ -50,22 +50,22 @@ function NavBtn({
     <button
       onClick={onClick}
       className={`
-        group flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[14px] transition-all duration-150 text-left
+        group flex items-center gap-3 w-full px-3 py-2.5 rounded-[14px] text-[14px] transition-all duration-150 text-left
         ${active
-          ? 'bg-blue-50 text-blue-700 font-semibold'
+          ? 'bg-[#F8E5DD] text-[#B8451F] font-semibold shadow-[inset_0_0_0_1px_rgba(226,98,63,0.14)]'
           : dimmed
-          ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-600 font-medium'
-          : 'text-gray-800 hover:bg-gray-50 hover:text-gray-900 font-semibold'
+          ? 'text-[#ABA49B] hover:bg-[#F1EEE9] hover:text-[#8B847C] font-medium'
+          : 'text-[#46413B] hover:bg-[#F1EEE9] hover:text-[#1C1A18] font-semibold'
         }
       `}
     >
       <Icon className={`h-4 w-4 shrink-0 transition-colors ${
-        active ? 'text-blue-600' : 'text-gray-600 group-hover:text-gray-800'
+        active ? 'text-[#E2623F]' : 'text-[#8B847C] group-hover:text-[#46413B]'
       }`} />
       <span className="flex-1 truncate">{label}</span>
       {count !== undefined && count > 0 && (
         <span className={`text-[12px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center ${
-          active ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-700'
+          active ? 'bg-[#F8E5DD] text-[#B8451F]' : 'bg-[#E7E3DC] text-[#46413B]'
         }`}>
           {count}
         </span>
@@ -98,7 +98,7 @@ export function Sidebar({
   }
 
   return (
-    <aside className="w-[200px] shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden">
+    <aside className="w-[220px] shrink-0 bg-[#FBFAF8] border-r border-[#E7E2DB] flex flex-col overflow-hidden">
 
       {/* ── LIBRARY ─────────────────────────────────────── */}
       <SectionLabel label="Library" />
@@ -115,22 +115,22 @@ export function Sidebar({
       </nav>
 
       {/* Divider */}
-      <div className="mx-4 my-3 h-px bg-gray-100" />
+      <div className="mx-4 my-3 h-px bg-[#E7E2DB]" />
 
       {/* ── FOLDERS ─────────────────────────────────────── */}
       <div className="flex items-center justify-between px-3 pb-2">
-        <p className="text-[12px] font-bold text-gray-700 uppercase tracking-wider">Folders</p>
+        <p className="text-[11px] font-bold text-[#ABA49B] uppercase tracking-wider">Folders</p>
         <div className="flex items-center gap-1">
           <button
             onClick={onNewFolder}
-            className="text-gray-500 hover:text-blue-600 transition-colors"
+            className="text-[#ABA49B] hover:text-[#E2623F] transition-colors"
             title="New folder"
           >
             <FolderPlus className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => setFoldersOpen(o => !o)}
-            className="text-gray-500 hover:text-gray-700 transition-colors"
+            className="text-[#ABA49B] hover:text-[#46413B] transition-colors"
           >
             {foldersOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
@@ -177,7 +177,7 @@ export function Sidebar({
                     if (e.key === 'Enter') commitRename(folder.id)
                     if (e.key === 'Escape') setEditingId(null)
                   }}
-                  className="w-full px-3 py-2.5 text-[14px] rounded-lg border border-blue-300 bg-blue-50 text-blue-800 outline-none"
+                  className="w-full px-3 py-2.5 text-[14px] rounded-[14px] border border-[#E2623F]/40 bg-[#F8E5DD] text-[#B8451F] outline-none"
                 />
               ) : (
                 <NavBtn
@@ -191,17 +191,17 @@ export function Sidebar({
 
               {/* Hover edit/delete actions */}
               {hoveredId === folder.id && editingId !== folder.id && (
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white rounded-lg border border-gray-100 shadow-sm px-0.5 py-0.5 z-10">
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 bg-white rounded-[10px] border border-[#E7E2DB] shadow-sm px-0.5 py-0.5 z-10">
                   <button
                     onClick={e => { e.stopPropagation(); setEditingId(folder.id); setEditName(folder.name) }}
-                    className="p-1 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    className="p-1 rounded-[8px] text-[#ABA49B] hover:text-[#E2623F] hover:bg-[#F8E5DD] transition-colors"
                     title="Rename"
                   >
                     <Pencil className="h-2.5 w-2.5" />
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); handleDelete(folder.id) }}
-                    className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    className="p-1 rounded-[8px] text-[#ABA49B] hover:text-red-500 hover:bg-red-50 transition-colors"
                     title="Delete"
                   >
                     <Trash2 className="h-2.5 w-2.5" />
@@ -214,7 +214,7 @@ export function Sidebar({
           {/* New Folder */}
           <button
             onClick={onNewFolder}
-            className="flex items-center gap-3 w-full px-3 py-2.5 text-[14px] text-gray-500 hover:text-blue-600 hover:bg-blue-50/60 rounded-lg transition-colors font-semibold"
+            className="flex items-center gap-3 w-full px-3 py-2.5 text-[14px] text-[#ABA49B] hover:text-[#E2623F] hover:bg-[#F8E5DD]/60 rounded-[14px] transition-colors font-semibold"
           >
             <FolderPlus className="h-4 w-4" />
             New Folder
@@ -222,11 +222,11 @@ export function Sidebar({
         </nav>
       )}
 
-      {/* User chip */}
-      <div className="p-3 border-t border-gray-100 shrink-0">
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg bg-gray-50">
-          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-orange-400 to-red-500 shrink-0" />
-          <span className="text-[13px] font-semibold text-gray-700 truncate">UI_UX_Workspace</span>
+      {/* Workspace chip */}
+      <div className="p-3 border-t border-[#E7E2DB] shrink-0">
+        <div className="flex items-center gap-2.5 px-3 py-2 rounded-[14px] bg-white border border-[#E7E2DB] shadow-[0_1px_2px_rgba(40,28,18,0.05)]">
+          <div className="h-6 w-6 rounded-[7px] bg-gradient-to-br from-[#E2623F] to-[#f0a07f] shrink-0" />
+          <span className="text-[13px] font-bold text-[#1C1A18] truncate">UI_UX_Workspace</span>
         </div>
       </div>
     </aside>
