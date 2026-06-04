@@ -145,16 +145,17 @@ export function renderComposition(htmlContent: string, jobId: string, durationSe
   // always overwrites whatever Claude generated to match the intended composition length.
   fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent, durationSecs), 'utf-8')
 
-  // fps is chosen to keep total frames ≤ 30 (empirical OOM-safe limit in this container).
-  // Empirical observations: complex CSS (tiled gradients, halftone, etc.) crashes Chrome
-  // headless at ~28 frames. Simple text-only compositions survive ~45 frames. Targeting
-  // 30 total frames gives headroom for moderately complex compositions.
-  // Formula: min(10, max(3, round(30 / duration)))
-  //   3 s → 10 fps (30 frames)
-  //   5 s →  6 fps (30 frames)
-  //  11 s →  3 fps (33 frames)
-  //  30 s →  3 fps (90 frames — only reached for very long clips)
-  const fps = Math.min(10, Math.max(3, Math.round(30 / durationSecs)))
+  // fps is chosen to keep total frames ≤ 45 (safe for simple CSS + video compositing).
+  // OOM data points:
+  //   Simple text overlay (CSS only): ~45 frames ✓
+  //   Tiled radial-gradient CSS (halftone): crashes at ~28 frames ✗  → banned in prompt
+  //   Video + simple overlay: similar profile to simple CSS overlay (video decode is
+  //     GPU-cached, not per-pixel CSS computation), so 45-frame budget should hold.
+  // Formula: min(15, max(4, round(45 / duration)))
+  //   3 s → 15 fps (45 frames)
+  //   5 s →  9 fps (45 frames)
+  //  11 s →  4 fps (44 frames)
+  const fps = Math.min(15, Math.max(4, Math.round(45 / durationSecs)))
 
   execSync(
     `npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft --fps ${fps}`,

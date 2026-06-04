@@ -48,9 +48,20 @@ COMPOSITION RULES
    Stick to: solid colors, one simple linear-gradient per element, opacity, translate/scale/rotate transforms.
    Include all CSS inside a <style> block in <head>.
 
-6. NEVER include <video>, <audio>, or <img> elements. The template video is composited as a
-   separate layer in post — your HTML is the overlay only. Even if a video URL is provided for
-   context, do NOT embed it as a <video> element.
+6. Template video as base layer — when a template video URL is provided in the user message,
+   include it as the FIRST CHILD inside #stage at data-track-index="0":
+
+   <video src="[TEMPLATE_URL]" id="template-video"
+          data-start="0" data-duration="${durationSecs}" data-track-index="0"
+          style="position:absolute;top:0;left:0;width:1080px;height:1920px;object-fit:cover;"
+          muted playsinline></video>
+
+   Place ALL end card overlay content at data-track-index="1" or higher so it renders
+   on top of the video. The output video will show the template video playing underneath
+   your end card design.
+   ⚠ If no template URL is given, use a solid background color on #stage instead.
+   ⚠ NEVER add <audio> or any <img> elements.
+   ⚠ NEVER add a second <video> element — one template video only.
 
 ════════════════════════════════════════
 FONTS — CRITICAL
@@ -114,7 +125,7 @@ export async function POST(request: NextRequest) {
       .eq('id', templateId)
       .single()
     if (template) {
-      templateContext = `\n\nBase template: "${template.name}" — duration ${durationSecs} seconds.\nDo NOT include the video as a <video> element. Your HTML is the overlay layer only; the template video is composited separately. Match the ${durationSecs} s duration exactly.`
+      templateContext = `\n\nTemplate video:\n- Name: "${template.name}"\n- URL: ${template.file_url}\n- Duration: ${durationSecs}s\n\nInclude this video as the base layer at data-track-index="0" following rule 6. Your end card design goes on top at data-track-index="1"+. The final render will show the template video playing behind your end card elements.`
     }
   }
 
