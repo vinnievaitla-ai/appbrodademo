@@ -21,31 +21,38 @@ const TMP_DIR = path.join(process.cwd(), 'tmp')
 //    the same 45 s timeline timeout. Fix: strip them, keep only the root.
 
 // Injected into <head> — not stripped by HyperFrames (no RUNTIME_INLINE_MARKERS).
+//
+// IMPORTANT: registration must be SYNCHRONOUS. The RUNTIME_IIFE (injected at end of
+// <head> by the HyperFrames file server) reads window.__timelines during its
+// DOMContentLoaded handler. A DOMContentLoaded-based registration races with the
+// runtime and loses — window.__timelines appears empty. Synchronous <head> execution
+// guarantees the stubs are visible before the runtime ever inspects the registry.
 const TIMELINE_STUB_SCRIPT = `<script>
 (function () {
   window.__timelines = window.__timelines || {};
-  function makeStub() {
+  function makeStub(dur) {
+    var d = dur || 8;
     return {
       seek: function () { return this; },
       time: function () { return 0; },
-      duration: function () { return 8; },
-      totalDuration: function () { return 8; },
+      duration: function () { return d; },
+      totalDuration: function () { return d; },
       pause: function () { return this; },
       play: function () { return this; },
       kill: function () {}
     };
   }
-  function register() {
+  // Register synchronously for the standard composition id used in generated HTML.
+  // This runs in <head>, before the HyperFrames RUNTIME_IIFE, so the stub is
+  // present when the runtime queries window.__timelines on DOMContentLoaded.
+  if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(8);
+  // Belt-and-suspenders: also catch any other ids after DOM is ready.
+  document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-composition-id]').forEach(function (el) {
       var id = el.getAttribute('data-composition-id');
-      if (id && !window.__timelines[id]) window.__timelines[id] = makeStub();
+      if (id && !window.__timelines[id]) window.__timelines[id] = makeStub(8);
     });
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', register);
-  } else {
-    register();
-  }
+  });
 })();
 </script>`
 
