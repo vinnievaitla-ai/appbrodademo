@@ -16,6 +16,8 @@ COMPOSITION RULES
    <div id="stage" data-composition-id="variant" data-width="1080" data-height="1920"
         data-start="0" data-duration="6">
    - Always 1080×1920 (vertical format for end cards / mobile)
+   ⚠ CRITICAL: data-composition-id MUST be exactly "variant" — any other value breaks the renderer.
+   ⚠ CRITICAL: data-duration MUST be a positive integer (e.g. 6) — omitting it causes zero-duration failure.
    - data-duration must equal the total composition length in seconds
    - Body must be exactly 1080px × 1920px with overflow:hidden; margin:0; padding:0
    ⚠ ONLY the root <div id="stage"> may have data-composition-id.

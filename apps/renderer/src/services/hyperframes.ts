@@ -46,11 +46,15 @@ const TIMELINE_STUB_SCRIPT = `<script>
   // This runs in <head>, before the HyperFrames RUNTIME_IIFE, so the stub is
   // present when the runtime queries window.__timelines on DOMContentLoaded.
   if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(6);
-  // Belt-and-suspenders: also catch any other ids after DOM is ready.
+  // Our DOMContentLoaded fires before HyperFrames' (we're earlier in <head>).
+  // Use it to guarantee data-duration is a valid positive number on every
+  // composition root before getDeclaredDuration() reads the DOM attribute.
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-composition-id]').forEach(function (el) {
       var id = el.getAttribute('data-composition-id');
       if (id && !window.__timelines[id]) window.__timelines[id] = makeStub(8);
+      var dur = parseFloat(el.getAttribute('data-duration') || '0');
+      if (!(dur > 0)) el.setAttribute('data-duration', '6');
     });
   });
 })();
