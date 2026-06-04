@@ -332,32 +332,113 @@ export function LibraryPage() {
               </div>
 
             ) : view.type === 'templates' ? (
-              /* Template Gallery */
-              <div className="flex-1 overflow-y-auto px-6 py-6">
-                {filteredTemplates.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-gray-200 rounded-2xl text-center bg-white/50">
-                    <div className="h-10 w-10 rounded-xl bg-gray-100 flex items-center justify-center mb-3">
-                      <Upload className="h-5 w-5 text-gray-400" />
+              /* Template Gallery + Folders below */
+              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-10">
+
+                {/* Templates section */}
+                <section>
+                  <div className="flex items-center gap-3 mb-4">
+                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Templates</h2>
+                    {filteredTemplates.length > 0 && (
+                      <span className="h-4 min-w-4 px-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 flex items-center justify-center">
+                        {filteredTemplates.length}
+                      </span>
+                    )}
+                    <div className="flex-1 h-px bg-gray-100" />
+                  </div>
+                  {filteredTemplates.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 border-2 border-dashed border-gray-200 rounded-2xl text-center bg-white/50">
+                      <div className="h-10 w-10 rounded-xl bg-gray-100 flex items-center justify-center mb-3">
+                        <Upload className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-700 mb-1">No templates yet</p>
+                      <p className="text-xs text-gray-400 mb-4">Upload your first {categoryLabel} template to get started</p>
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                      >
+                        Upload Template
+                      </button>
                     </div>
-                    <p className="text-sm font-semibold text-gray-700 mb-1">No templates yet</p>
-                    <p className="text-xs text-gray-400 mb-4">Upload your first {categoryLabel} template to get started</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-4">
+                      {filteredTemplates.map(t => (
+                        <MediaCard
+                          key={t.id} id={t.id} name={t.name} fileUrl={t.file_url}
+                          fileSizeBytes={t.file_size_bytes} onDelete={handleDeleteTemplate} onGenerate={openGenerateModal}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+
+                {/* Generated Variants — folder grid inline below templates */}
+                <section>
+                  <div className="flex items-center gap-3 mb-4">
+                    <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Generated Variants</h2>
+                    {(folders.length > 0 || variantCounts['untagged'] > 0) && (
+                      <span className="h-4 min-w-4 px-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-500 flex items-center justify-center">
+                        {folders.length + (variantCounts['untagged'] > 0 ? 1 : 0)}
+                      </span>
+                    )}
+                    <div className="flex-1 h-px bg-gray-100" />
                     <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+                      onClick={() => setView({ type: 'folder-grid' })}
+                      className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold shrink-0"
                     >
-                      Upload Template
+                      View all →
                     </button>
                   </div>
-                ) : (
-                  <div className="flex flex-wrap gap-4">
-                    {filteredTemplates.map(t => (
-                      <MediaCard
-                        key={t.id} id={t.id} name={t.name} fileUrl={t.file_url}
-                        fileSizeBytes={t.file_size_bytes} onDelete={handleDeleteTemplate} onGenerate={openGenerateModal}
-                      />
-                    ))}
-                  </div>
-                )}
+
+                  {/* Pending banner */}
+                  {pendingJobIds.length > 0 && (
+                    <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-2.5">
+                      <Sparkles className="h-4 w-4 text-blue-500 animate-pulse shrink-0" />
+                      <p className="text-[13px] text-blue-800 font-semibold flex-1">
+                        {pendingJobIds.length} variant{pendingJobIds.length !== 1 ? 's' : ''} rendering…
+                      </p>
+                    </div>
+                  )}
+
+                  {folders.length === 0 && variantCounts['untagged'] === 0 && pendingJobIds.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-blue-100 rounded-2xl text-center bg-blue-50/20">
+                      <Sparkles className="h-6 w-6 text-blue-400 mb-2" />
+                      <p className="text-sm font-semibold text-gray-600 mb-1">No generated variants yet</p>
+                      <p className="text-xs text-gray-400 mb-3">Select a template and click Generate</p>
+                      <button
+                        onClick={() => openGenerateModal()}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                      >
+                        <Sparkles className="h-3 w-3" /> Generate Variant
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+                      {folders.map(folder => {
+                        const fv = variants.filter(v => getVariantFolder(v.id) === folder.id)
+                        return (
+                          <FolderCard
+                            key={folder.id}
+                            id={folder.id}
+                            name={folder.name}
+                            createdAt={folder.createdAt}
+                            variants={fv}
+                            onClick={() => setView({ type: 'folder-workspace', folderId: folder.id })}
+                          />
+                        )
+                      })}
+                      {variantCounts['untagged'] > 0 && (
+                        <FolderCard
+                          id="untagged"
+                          name="Untagged"
+                          variants={variants.filter(v => getVariantFolder(v.id) === null)}
+                          isUntagged
+                          onClick={() => setView({ type: 'folder-workspace', folderId: 'untagged' })}
+                        />
+                      )}
+                    </div>
+                  )}
+                </section>
               </div>
 
             ) : view.type === 'folder-grid' ? (

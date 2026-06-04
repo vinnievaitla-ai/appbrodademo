@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import {
   Anchor, User, Type, AudioWaveform, LayoutTemplate,
-  FolderOpen, Folder, FolderPlus, LayoutGrid, Clock,
+  FolderOpen, Folder, FolderPlus, LayoutGrid,
   ChevronDown, ChevronRight, Pencil, Trash2,
 } from 'lucide-react'
 import type { Folder as FolderType } from '@/lib/types'
@@ -33,8 +33,8 @@ interface SidebarProps {
 
 function SectionLabel({ label, action }: { label: string; action?: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between px-4 pt-4 pb-1.5">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
+    <div className="flex items-center justify-between px-3 pt-5 pb-2">
+      <p className="text-[12px] font-bold text-gray-700 uppercase tracking-wider">{label}</p>
       {action}
     </div>
   )
@@ -50,22 +50,22 @@ function NavBtn({
     <button
       onClick={onClick}
       className={`
-        group flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] transition-all duration-150 text-left
+        group flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[14px] transition-all duration-150 text-left
         ${active
           ? 'bg-blue-50 text-blue-700 font-semibold'
           : dimmed
           ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-600 font-medium'
-          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 font-medium'
+          : 'text-gray-800 hover:bg-gray-50 hover:text-gray-900 font-semibold'
         }
       `}
     >
-      <Icon className={`h-3.5 w-3.5 shrink-0 transition-colors ${
-        active ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
+      <Icon className={`h-4 w-4 shrink-0 transition-colors ${
+        active ? 'text-blue-600' : 'text-gray-600 group-hover:text-gray-800'
       }`} />
       <span className="flex-1 truncate">{label}</span>
       {count !== undefined && count > 0 && (
-        <span className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 ${
-          active ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'
+        <span className={`text-[12px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center ${
+          active ? 'bg-blue-100 text-blue-600' : 'bg-gray-200 text-gray-700'
         }`}>
           {count}
         </span>
@@ -117,40 +117,36 @@ export function Sidebar({
       {/* Divider */}
       <div className="mx-4 my-3 h-px bg-gray-100" />
 
-      {/* ── GENERATED CONTENT ───────────────────────────── */}
-      <SectionLabel label="Generated" />
-      <nav className="px-2 space-y-0.5">
-        <NavBtn
-          active={view.type === 'folder-grid'}
-          onClick={() => onViewChange({ type: 'folder-grid' })}
-          Icon={LayoutGrid}
-          label="All Variants"
-        />
-        <NavBtn
-          active={false}
-          onClick={() => {}}
-          Icon={Clock}
-          label="Recent"
-          dimmed
-        />
-      </nav>
-
-      {/* Divider */}
-      <div className="mx-4 my-3 h-px bg-gray-100" />
-
       {/* ── FOLDERS ─────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 pt-1 pb-1.5">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Folders</p>
-        <button
-          onClick={() => setFoldersOpen(o => !o)}
-          className="text-gray-300 hover:text-gray-500 transition-colors"
-        >
-          {foldersOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </button>
+      <div className="flex items-center justify-between px-3 pb-2">
+        <p className="text-[12px] font-bold text-gray-700 uppercase tracking-wider">Folders</p>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onNewFolder}
+            className="text-gray-500 hover:text-blue-600 transition-colors"
+            title="New folder"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => setFoldersOpen(o => !o)}
+            className="text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            {foldersOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+        </div>
       </div>
 
       {foldersOpen && (
         <nav className="flex-1 px-2 overflow-y-auto space-y-0.5 pb-2">
+
+          {/* All Variants overview */}
+          <NavBtn
+            active={view.type === 'folder-grid'}
+            onClick={() => onViewChange({ type: 'folder-grid' })}
+            Icon={LayoutGrid}
+            label="All Variants"
+          />
 
           {/* Untagged pseudo-folder */}
           {(variantCounts['untagged'] ?? 0) > 0 && (
@@ -181,7 +177,7 @@ export function Sidebar({
                     if (e.key === 'Enter') commitRename(folder.id)
                     if (e.key === 'Escape') setEditingId(null)
                   }}
-                  className="w-full px-3 py-2 text-[13px] rounded-lg border border-blue-300 bg-blue-50 text-blue-800 outline-none"
+                  className="w-full px-3 py-2.5 text-[14px] rounded-lg border border-blue-300 bg-blue-50 text-blue-800 outline-none"
                 />
               ) : (
                 <NavBtn
@@ -218,9 +214,9 @@ export function Sidebar({
           {/* New Folder */}
           <button
             onClick={onNewFolder}
-            className="flex items-center gap-2 w-full px-3 py-2 text-[13px] text-gray-400 hover:text-blue-600 hover:bg-blue-50/60 rounded-lg transition-colors font-medium"
+            className="flex items-center gap-3 w-full px-3 py-2.5 text-[14px] text-gray-500 hover:text-blue-600 hover:bg-blue-50/60 rounded-lg transition-colors font-semibold"
           >
-            <FolderPlus className="h-3.5 w-3.5" />
+            <FolderPlus className="h-4 w-4" />
             New Folder
           </button>
         </nav>
@@ -228,9 +224,9 @@ export function Sidebar({
 
       {/* User chip */}
       <div className="p-3 border-t border-gray-100 shrink-0">
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-gray-50">
-          <div className="h-5 w-5 rounded-full bg-gradient-to-br from-orange-400 to-red-500 shrink-0" />
-          <span className="text-[12px] font-medium text-gray-600 truncate">UI_UX_Workspace</span>
+        <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg bg-gray-50">
+          <div className="h-6 w-6 rounded-full bg-gradient-to-br from-orange-400 to-red-500 shrink-0" />
+          <span className="text-[13px] font-semibold text-gray-700 truncate">UI_UX_Workspace</span>
         </div>
       </div>
     </aside>
