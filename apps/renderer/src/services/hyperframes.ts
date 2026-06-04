@@ -28,17 +28,22 @@ const TMP_DIR = path.join(process.cwd(), 'tmp')
 // runtime and loses — window.__timelines appears empty. Synchronous <head> execution
 // guarantees the stubs are visible before the runtime ever inspects the registry.
 //
-// 4. data-duration must equal the actual CSS animation span.
-//    If data-duration > max(animation-delay + animation-duration), HyperFrames seeks
-//    past the last keyframe. This causes the streaming encode to receive fewer frames
-//    than expected, leaving x264's lookahead buffer unflushed → size=0kB output.
-//    Fix: our DOMContentLoaded (fires before the runtime's) reads getAnimations() on
-//    every element and sets data-duration to the real animation span.
+// NOTE on attempted CSS duration detection:
+//   getAnimations().effect.getTiming().duration → wrong: Chrome headless-shell returns
+//     seconds, not ms, so /1000 produced near-zero values (1 frame captured).
+//   getComputedStyle('*').animationDuration → wrong: forced a synchronous style flush
+//     across every element, spiking Chrome's memory and reducing the OOM threshold from
+//     ~61 frames to ~23 frames. Also returned sub-second values for unknown reasons.
+//
+//   Both approaches were reverted. The correct strategy is:
+//   • Keep data-duration simple: if missing/zero, default to the render fps × duration.
+//   • Use --fps 15 so a 3 s composition = 45 total frames, safely below Chrome's ~61-frame
+//     OOM ceiling in the container.
 const TIMELINE_STUB_SCRIPT = `<script>
 (function () {
   window.__timelines = window.__timelines || {};
   function makeStub(dur) {
-    var d = dur || 6;
+    var d = dur || 3;
     return {
       seek: function () { return this; },
       time: function () { return 0; },
@@ -52,60 +57,21 @@ const TIMELINE_STUB_SCRIPT = `<script>
   // Register synchronously for the standard composition id used in generated HTML.
   // This runs in <head>, before the HyperFrames RUNTIME_IIFE, so the stub is
   // present when the runtime queries window.__timelines on DOMContentLoaded.
-  if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(6);
+  if (!window.__timelines['variant']) window.__timelines['variant'] = makeStub(3);
   // Our DOMContentLoaded fires before HyperFrames' (we're earlier in <head>).
-  // Use it to:
-  //   a) Compute the true composition span from computed CSS animation timings.
-  //      getComputedStyle() returns animationDuration/animationDelay as CSS strings
-  //      like "3s" or "500ms" — unambiguous units, available from the first style calc.
-  //      (getAnimations().effect.getTiming().duration was tried first but Chrome
-  //       headless-shell returns values in seconds, not ms, making /1000 wrong.)
-  //   b) Write that span into data-duration so getDeclaredDuration() gets the real value.
-  //   c) Register stubs for any non-'variant' composition ids.
+  // Use it to guarantee data-duration > 0 and register stubs for non-'variant' ids.
   document.addEventListener('DOMContentLoaded', function () {
-    // Parses a CSS time string ("2s", "500ms", "0") → number of seconds.
-    function parseSec(s) {
-      s = (s || '').trim();
-      if (!s) return 0;
-      return s.indexOf('ms') !== -1 ? parseFloat(s) / 1000 : (parseFloat(s) || 0);
-    }
-
-    // Step a: walk every element and read its computed animation timings.
-    var maxEnd = 0;
-    document.querySelectorAll('*').forEach(function (el) {
-      var cs = window.getComputedStyle(el);
-      var durs   = (cs.animationDuration || '').split(',');
-      var delays = (cs.animationDelay   || '').split(',');
-      for (var k = 0; k < durs.length; k++) {
-        var d = parseSec(durs[k]);
-        if (d <= 0) continue; // no real animation on this slot
-        var delay = parseSec(delays[k] || '0s');
-        var end = Math.max(0, delay) + d;
-        if (end > maxEnd) maxEnd = end;
-      }
-    });
-
-    // Step b & c: apply to every composition root.
     document.querySelectorAll('[data-composition-id]').forEach(function (el) {
-      var id = el.getAttribute('data-composition-id');
-      var declared = parseFloat(el.getAttribute('data-duration') || '0');
-      // Prefer computed span; fall back to declared value; last resort: 6 s.
-      var effective = maxEnd > 0 ? maxEnd : (declared > 0 ? declared : 6);
-      el.setAttribute('data-duration', String(effective));
-
-      // Register stub (or update existing one) with the correct duration.
-      if (id && !window.__timelines[id]) {
-        window.__timelines[id] = makeStub(effective);
-      } else if (id && window.__timelines[id]) {
-        window.__timelines[id].duration      = function () { return effective; };
-        window.__timelines[id].totalDuration = function () { return effective; };
-      }
+      var id  = el.getAttribute('data-composition-id');
+      var dur = parseFloat(el.getAttribute('data-duration') || '0');
+      if (!(dur > 0)) el.setAttribute('data-duration', '3');
+      if (id && !window.__timelines[id]) window.__timelines[id] = makeStub(dur > 0 ? dur : 3);
     });
   });
 })();
 </script>`
 
-function sanitizeHtml(html: string, defaultDuration = 6): string {
+function sanitizeHtml(html: string, defaultDuration = 3): string {
   let found = false
 
   // Fix 1 & 3 – root gets data-duration; extra data-composition-id stripped from children
@@ -145,11 +111,13 @@ export function renderComposition(htmlContent: string, jobId: string): string {
   fs.mkdirSync(jobDir, { recursive: true })
   fs.writeFileSync(path.join(jobDir, 'index.html'), sanitizeHtml(htmlContent), 'utf-8')
 
-  // --workers 1: single Chrome — parallel workers (default in 0.6.x) cause OOM.
-  // --quality draft: uses a fast x264 preset without mbtree. The default (standard)
-  //   uses mbtree=1 + rc_lookahead=40 which buffers frames before flushing; if Chrome
-  //   delivers fewer frames than expected the encoder never flushes → size=0kB output.
-  execSync(`npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft`, {
+  // --workers 1:     single Chrome — parallel workers cause OOM in the container.
+  // --quality draft: fast x264 preset (mbtree=0) so the encoder flushes each frame
+  //                  immediately instead of buffering a 40-frame lookahead window.
+  // --fps 15:        3 s @ 15 fps = 45 total frames, safely below Chrome's ~61-frame
+  //                  OOM ceiling. Higher fps causes Chrome to OOM mid-render, closing
+  //                  the FFmpeg pipe early and producing 0-byte output.
+  execSync(`npx hyperframes render ${jobDir} -o ${outputPath} --workers 1 --quality draft --fps 15`, {
     timeout: 300_000,
     stdio: 'pipe',
   })
