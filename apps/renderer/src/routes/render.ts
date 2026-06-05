@@ -76,14 +76,32 @@ MODE B — TEXT + CTA  (use when user asks for a button, CTA, download prompt, e
 ─────────────────────────────────────────
 • Element 1 — text card (same as Mode A but positioned higher):
     top: 30%; same styles as above.
-• Element 2 — CTA pill button:
-    position: absolute; left: 50%; top: 78%; transform: translateX(-50%);
-    width: 680px; height: 108px; border-radius: 999px;
-    background: a BRIGHT solid color — e.g. #22C55E (green), #3B82F6 (blue), #F59E0B (amber).
-    ⚠ NEVER use black, dark-gray, or any color with R<60 AND G<60 AND B<60 for the button.
-    display: flex; align-items: center; justify-content: center;
-• CTA label inside button: font-size 44px; font-weight 800; color: #FFFFFF;
-• Button animation: scale 0.95→1 over 0.5s, then a gentle pulse (scale 1→1.03→1 on repeat).
+• Element 2 — CTA pill button. Copy this CSS exactly as a starting point, then adapt colors:
+
+    .cta-btn {
+      position: absolute;
+      left: 50%; top: 78%; transform: translateX(-50%);
+      width: 700px; height: 112px; border-radius: 999px;
+      /* Golden gradient — professional game style. Swap hues to match context. */
+      background: linear-gradient(180deg, #FFB627 0%, #E8821A 55%, #C8600E 100%);
+      border: 3px solid rgba(255, 210, 100, 0.55);
+      box-shadow: inset 0 4px 0 rgba(255,255,255,0.28), 0 8px 24px rgba(0,0,0,0.38);
+      display: flex; align-items: center; justify-content: center; gap: 18px;
+    }
+    .cta-label {
+      font-size: 52px; font-weight: 800; color: #FFFFFF; letter-spacing: 0.03em;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    }
+
+• Adapt the gradient to fit the context (e.g. blue for "Install", green for "Download", amber/gold for gaming). Keep it a two-stop vertical gradient — ONE colour family only.
+• Fade+scale-in animation: opacity 0→1 and scale 0.93→1 over 0.55s.
+
+BUTTON DESIGN LAWS — violations produce ugly output:
+  ✗ NEVER use multiple competing hue families on the same button (no red + yellow + green).
+  ✗ NEVER add a neon glow box-shadow (e.g. 0 0 30px #00FF00). One drop shadow only.
+  ✗ NEVER use yellow, lime, or cyan text — always #FFFFFF on coloured buttons.
+  ✗ NEVER add an outer border-color that clashes with the gradient (keep it a lighter tint of the gradient).
+  ✗ NEVER add more than one box-shadow layer.
 
 UNIVERSAL RULES (both modes)
 ─────────────────────────────────────────
