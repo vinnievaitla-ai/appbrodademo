@@ -212,11 +212,36 @@ export function GenerateModal({ open, onClose, onJobsCreated, selectedTemplate }
                 <textarea
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white focus:border-transparent transition-all"
                   rows={4}
-                  placeholder="e.g. Bold end card for a crossword game. Dark navy background, bright yellow 'Download Free' button, game logo centered at top, subtle particle animation, 6 seconds."
+                  placeholder='e.g. overlay text "Play this game to relax" in Hindi'
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   autoFocus
                 />
+                {/* Mode hint chips */}
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider self-center">Examples:</span>
+                  <button
+                    type="button"
+                    onClick={() => setPrompt('overlay text "Play this game to relax" in Hindi')}
+                    className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-medium rounded-full transition-colors"
+                  >
+                    Text only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrompt('overlay text "Play this game to relax" in Hindi with a download button "Download Free"')}
+                    className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-medium rounded-full transition-colors"
+                  >
+                    Text + CTA button
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrompt('overlay text "Play this game to relax" in 3 languages - English, Hindi, Telugu')}
+                    className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-medium rounded-full transition-colors"
+                  >
+                    Multi-language
+                  </button>
+                </div>
               </div>
 
               {dispatchError && (

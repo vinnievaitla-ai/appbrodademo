@@ -49,28 +49,48 @@ function buildSystemPrompt(durationSecs: number): string {
 HyperFrames converts HTML files into MP4 videos by driving headless Chrome frame-by-frame and encoding with FFmpeg.
 The renderer has a built-in CSS animation frame adapter — do NOT add any custom window.__hf or window.__player scripts.
 
-DESIGN PRINCIPLES — READ FIRST
-You are creating a TEXT OVERLAY on top of a real video. The black background becomes transparent,
-so only your non-black elements appear over the video. Design like a professional mobile ad:
+HOW THIS WORKS — READ FIRST
+You are compositing a TEXT OVERLAY onto a real video. The stage background is pure black (#000000).
+After rendering, FFmpeg colorkeys out all pure-black pixels so only your non-black elements appear
+over the video. This means:
+  • Every visible element MUST have a non-black background or color.
+  • rgba(0,0,0,N) with N < 1 is fine — it is NOT pure black.
+  • Pure #000000 or any color where R<30 AND G<30 AND B<30 becomes INVISIBLE. Never use these for text, buttons, or backgrounds you want seen.
 
-CONTENT RULE — MOST IMPORTANT:
-- ONLY include text and elements that the user explicitly requested.
-- Do NOT invent extra slogans, subtitles, taglines, or CTA buttons unless the user asked for them.
-- If the user says "overlay text X", show exactly X — nothing more.
+════════════════════════════════════════
+TWO COMPOSITION MODES — choose based on the request
+════════════════════════════════════════
 
-LAYOUT RULES:
-- TEXT IS THE HERO. The message must be large, bold, and instantly readable at a glance.
-- Keep most of the frame transparent (black) so the video underneath stays clearly visible.
-- Put a semi-transparent dark rounded card (background: rgba(0,0,0,0.55); border-radius: 20px; padding: 40px 60px) BEHIND text to guarantee legibility over any video background.
-- Place the main message in the upper-center or center of the screen (top: 20%–50%).
-- Animations: subtle fade-in (0→1 opacity) or gentle scale (0.9→1). No chaotic motion.
-- No decorative shapes unless the user asks for them.
+MODE A — TEXT ONLY  (use when NO button/CTA/download is requested)
+─────────────────────────────────────────
+• One element: a text card centered on the frame.
+• Text card:
+    position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.58);   ← semi-transparent dark card (NOT pure black)
+    border-radius: 24px; padding: 52px 72px; text-align: center; width: 880px;
+• Headline inside card: font-size 88px; font-weight 800; color: #FFFFFF; line-height: 1.15;
+• Fade-in animation: opacity 0→1 over 0.6s.
+• NOTHING ELSE — no buttons, no extra copy, no decorative shapes.
 
-STRICTLY FORBIDDEN:
-- Adding any text, slogans, buttons, or copy that the user did not ask for.
-- Large solid-colored shapes (circles, blobs) larger than 100px — they block the video.
-- Text without a readable background — always use the dark card behind text.
-- Cluttered layouts. Clean = professional.
+MODE B — TEXT + CTA  (use when user asks for a button, CTA, download prompt, etc.)
+─────────────────────────────────────────
+• Element 1 — text card (same as Mode A but positioned higher):
+    top: 30%; same styles as above.
+• Element 2 — CTA pill button:
+    position: absolute; left: 50%; top: 78%; transform: translateX(-50%);
+    width: 680px; height: 108px; border-radius: 999px;
+    background: a BRIGHT solid color — e.g. #22C55E (green), #3B82F6 (blue), #F59E0B (amber).
+    ⚠ NEVER use black, dark-gray, or any color with R<60 AND G<60 AND B<60 for the button.
+    display: flex; align-items: center; justify-content: center;
+• CTA label inside button: font-size 44px; font-weight 800; color: #FFFFFF;
+• Button animation: scale 0.95→1 over 0.5s, then a gentle pulse (scale 1→1.03→1 on repeat).
+
+UNIVERSAL RULES (both modes)
+─────────────────────────────────────────
+• Do NOT add anything the user did not ask for (no extra slogans, no extra buttons, no shapes).
+• Do NOT use black or near-black (R<30 AND G<30 AND B<30) for any visible element.
+• Do NOT use CSS filter, backdrop-filter, or mix-blend-mode.
+• Keep everything else on the stage pure #000000 so it keys out cleanly.
 
 ════════════════════════════════════════
 COMPOSITION RULES
@@ -131,14 +151,24 @@ OUTPUT
 Return ONLY the complete HTML file. No markdown fences, no explanation, no comments outside the HTML.`
 }
 
+// Detect whether the prompt is asking for a CTA button
+function hasCta(prompt: string): boolean {
+  return /\b(cta|button|btn|download|install|play now|try now|sign up|get it|buy|shop|tap|click|call.?to.?action)\b/i.test(prompt)
+}
+
 async function generateHtml(prompt: string, durationSecs: number, templateContext: string): Promise<string> {
+  const mode = hasCta(prompt) ? 'B' : 'A'
+  const modeLabel = mode === 'B'
+    ? 'MODE B (TEXT + CTA): render the overlay text in a text card AND a CTA pill button at the bottom.'
+    : 'MODE A (TEXT ONLY): render only the overlay text in a centered text card. No buttons, no extra copy.'
+
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 8192,
     system: buildSystemPrompt(durationSecs),
     messages: [{
       role: 'user',
-      content: `Generate a HyperFrames end card composition for: ${prompt}${templateContext}`,
+      content: `${modeLabel}\n\nRequest: ${prompt}${templateContext}`,
     }],
   })
   return (message.content[0] as { text: string }).text.trim()
