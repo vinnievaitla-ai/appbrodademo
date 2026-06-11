@@ -174,20 +174,88 @@ function hasCta(prompt: string): boolean {
   return /\b(cta|button|btn|download|install|play now|try now|sign up|get it|buy|shop|tap|click|call.?to.?action)\b/i.test(prompt)
 }
 
-async function generateHtml(prompt: string, durationSecs: number, templateContext: string): Promise<string> {
+import type {
+  ContentBlockParam,
+  TextBlockParam,
+  ImageBlockParam,
+  DocumentBlockParam,
+} from '@anthropic-ai/sdk/resources/messages'
+
+type RendererAttachment = { type: 'image' | 'pdf' | 'document'; url: string; name: string }
+
+type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+
+function toImageMediaType(raw: string): ImageMediaType {
+  const t = raw.split(';')[0].trim().toLowerCase()
+  if (t === 'image/png')  return 'image/png'
+  if (t === 'image/gif')  return 'image/gif'
+  if (t === 'image/webp') return 'image/webp'
+  return 'image/jpeg'
+}
+
+async function fetchBase64(url: string): Promise<{ data: string; contentType: string }> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Failed to fetch attachment: ${url} (${res.status})`)
+  const buffer = await res.arrayBuffer()
+  return {
+    data: Buffer.from(buffer).toString('base64'),
+    contentType: res.headers.get('content-type') || 'application/octet-stream',
+  }
+}
+
+async function generateHtml(
+  prompt: string,
+  durationSecs: number,
+  templateContext: string,
+  attachments: RendererAttachment[] = []
+): Promise<string> {
   const mode = hasCta(prompt) ? 'B' : 'A'
   const modeLabel = mode === 'B'
     ? 'MODE B (TEXT + CTA): render the overlay text in a text card AND a CTA pill button at the bottom.'
     : 'MODE A (TEXT ONLY): render only the overlay text in a centered text card. No buttons, no extra copy.'
 
+  const content: ContentBlockParam[] = [
+    {
+      type: 'text',
+      text: `${modeLabel}\n\nRequest: ${prompt}${templateContext}`,
+    } satisfies TextBlockParam,
+  ]
+
+  for (const att of attachments) {
+    try {
+      if (att.type === 'image') {
+        const { data, contentType } = await fetchBase64(att.url)
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: toImageMediaType(contentType),
+            data,
+          },
+        } satisfies ImageBlockParam)
+      } else if (att.type === 'pdf') {
+        const { data } = await fetchBase64(att.url)
+        content.push({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data },
+        } satisfies DocumentBlockParam)
+      } else {
+        // document (PPTX/DOCX/JSON) — filename context hint only (Phase 2 parsing)
+        content.push({
+          type: 'text',
+          text: `Reference file attached: ${att.name} (use context from prompt to interpret)`,
+        } satisfies TextBlockParam)
+      }
+    } catch (err: any) {
+      console.warn(`[render] Could not load attachment ${att.name}: ${err.message}`)
+    }
+  }
+
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 8192,
     system: buildSystemPrompt(durationSecs),
-    messages: [{
-      role: 'user',
-      content: `${modeLabel}\n\nRequest: ${prompt}${templateContext}`,
-    }],
+    messages: [{ role: 'user', content }],
   })
   return (message.content[0] as { text: string }).text.trim()
 }
@@ -252,13 +320,14 @@ router.post('/render', (req: Request, res: Response) => {
     return
   }
 
-  const { jobId, htmlContent, prompt, duration, templateUrl, templateContext } = req.body as {
+  const { jobId, htmlContent, prompt, duration, templateUrl, templateContext, attachments } = req.body as {
     jobId: string
     htmlContent?: string
     prompt?: string
     duration?: number
     templateUrl?: string
     templateContext?: string
+    attachments?: RendererAttachment[]
   }
 
   if (!jobId || (!htmlContent && !prompt)) {
@@ -274,7 +343,7 @@ router.post('/render', (req: Request, res: Response) => {
   enqueueRender(async () => {
     try {
       // If prompt-mode: generate HTML here on Railway (no Vercel timeout risk)
-      const html = htmlContent ?? await generateHtml(prompt!, durationSecs, templateContext ?? '')
+      const html = htmlContent ?? await generateHtml(prompt!, durationSecs, templateContext ?? '', attachments ?? [])
       await runRenderJob(jobId, html, durationSecs, templateUrl)
     } catch (err: any) {
       await handleJobError(jobId, err)

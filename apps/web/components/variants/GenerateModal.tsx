@@ -5,6 +5,8 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import {
   Sparkles, X, ArrowRight, Wand2, CheckCircle2, AlertCircle, RotateCcw,
 } from 'lucide-react'
+import { AttachmentPicker } from './AttachmentPicker'
+import type { PendingAttachment, ProcessedAttachment } from '@/lib/attachments'
 
 interface SelectedTemplate {
   id: string
@@ -37,6 +39,7 @@ export function GenerateModal({ open, onClose, onJobsCreated, selectedTemplate }
   const [templateDuration, setTemplateDuration] = useState<number | null>(null)
   const [pendingJobIds, setPendingJobIds] = useState<string[]>([])
   const [statusLines, setStatusLines] = useState<string[]>([])
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const templateVideoRef = useRef<HTMLVideoElement>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pendingRef = useRef<string[]>([])
@@ -51,6 +54,7 @@ export function GenerateModal({ open, onClose, onJobsCreated, selectedTemplate }
       setTemplateDuration(null)
       setPendingJobIds([])
       setStatusLines([])
+      setPendingAttachments([])
     }
   }, [open])
 
@@ -114,6 +118,50 @@ export function GenerateModal({ open, onClose, onJobsCreated, selectedTemplate }
     setStepIndex(0)
 
     try {
+      // ── Upload binary attachments (image / pdf / document) to Supabase ──────
+      const processedAttachments: ProcessedAttachment[] = []
+
+      for (const att of pendingAttachments) {
+        if (att.category === 'html-css') {
+          processedAttachments.push({
+            category: 'html-css',
+            name: att.file.name,
+            textContent: att.parsedText,
+          })
+        } else if (att.category === 'csv' || att.category === 'xlsx') {
+          processedAttachments.push({
+            category: att.category,
+            name: att.file.name,
+            rows: att.parsedRows,
+            headers: att.parsedHeaders,
+          })
+        } else {
+          // image / pdf / document — upload to Supabase
+          setStatusLines(prev => [...prev, `Uploading ${att.file.name}…`])
+          const ext = att.file.name.split('.').pop() || 'bin'
+          const urlRes = await fetch(`/api/attachments/upload-url?ext=${ext}`)
+          if (!urlRes.ok) throw new Error(`Could not get upload URL for ${att.file.name}`)
+          const { signedUrl, publicUrl } = await urlRes.json()
+
+          const uploadRes = await fetch(signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': att.file.type || 'application/octet-stream' },
+            body: att.file,
+          })
+          if (!uploadRes.ok) throw new Error(`Upload failed for ${att.file.name}`)
+
+          processedAttachments.push({
+            category: att.category,
+            name: att.file.name,
+            storageUrl: publicUrl,
+          })
+        }
+      }
+
+      if (processedAttachments.length > 0) {
+        setStatusLines(prev => [...prev, `${processedAttachments.length} attachment(s) ready — dispatching…`])
+      }
+
       const res = await fetch('/api/variants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,6 +169,7 @@ export function GenerateModal({ open, onClose, onJobsCreated, selectedTemplate }
           prompt,
           templateId: selectedTemplate?.id,
           templateDuration: templateDuration ? Math.round(templateDuration) : undefined,
+          attachments: processedAttachments.length > 0 ? processedAttachments : undefined,
         }),
       })
       const data = await res.json()
@@ -204,6 +253,11 @@ export function GenerateModal({ open, onClose, onJobsCreated, selectedTemplate }
                   </div>
                 </div>
               )}
+
+              <AttachmentPicker
+                attachments={pendingAttachments}
+                onChange={setPendingAttachments}
+              />
 
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
