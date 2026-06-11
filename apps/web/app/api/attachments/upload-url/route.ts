@@ -19,7 +19,15 @@ export async function GET(request: NextRequest) {
     .from('attachments')
     .createSignedUploadUrl(filePath)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    const isMissingBucket = error.message?.toLowerCase().includes('not found') ||
+      error.message?.toLowerCase().includes('does not exist') ||
+      error.message?.toLowerCase().includes('bucket')
+    const hint = isMissingBucket
+      ? ' — create an "attachments" bucket (public, 50MB) in your Supabase Storage dashboard'
+      : ''
+    return NextResponse.json({ error: error.message + hint }, { status: 500 })
+  }
 
   const { data: { publicUrl } } = supabase.storage
     .from('attachments')
