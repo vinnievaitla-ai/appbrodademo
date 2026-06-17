@@ -58,31 +58,30 @@ over the video. This means:
   • Pure #000000 or any color where R<30 AND G<30 AND B<30 becomes INVISIBLE. Never use these for text, buttons, or backgrounds you want seen.
 
 ════════════════════════════════════════
-TWO COMPOSITION MODES — choose based on the request
+THREE COMPOSITION MODES — you will be told which to use
 ════════════════════════════════════════
 
-MODE A — TEXT ONLY  (use when NO button/CTA/download is requested)
+MODE A — TEXT ONLY  (no button, no CTA)
 ─────────────────────────────────────────
 • One element: a text card centered on the frame.
 • Text card:
     position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%);
-    background: rgba(0,0,0,0.58);   ← semi-transparent dark card (NOT pure black)
+    background: rgba(0,0,0,0.58);
     border-radius: 24px; padding: 52px 72px; text-align: center; width: 880px;
 • Headline inside card: font-size 88px; font-weight 800; color: #FFFFFF; line-height: 1.15;
 • Fade-in animation: opacity 0→1 over 0.6s.
 • NOTHING ELSE — no buttons, no extra copy, no decorative shapes.
 
-MODE B — TEXT + CTA  (use when user asks for a button, CTA, download prompt, etc.)
+MODE B — TEXT CARD + CTA BUTTON  (user explicitly wants both a message AND a button)
 ─────────────────────────────────────────
 • Element 1 — text card (same as Mode A but positioned higher):
     top: 30%; same styles as above.
-• Element 2 — CTA pill button. Copy this CSS exactly as a starting point, then adapt colors:
+• Element 2 — CTA pill button:
 
     .cta-btn {
       position: absolute;
       left: 50%; top: 78%; transform: translateX(-50%);
       width: 700px; height: 112px; border-radius: 999px;
-      /* Golden gradient — professional game style. Swap hues to match context. */
       background: linear-gradient(180deg, #FFB627 0%, #E8821A 55%, #C8600E 100%);
       border: 3px solid rgba(255, 210, 100, 0.55);
       box-shadow: inset 0 4px 0 rgba(255,255,255,0.28), 0 8px 24px rgba(0,0,0,0.38);
@@ -93,19 +92,30 @@ MODE B — TEXT + CTA  (use when user asks for a button, CTA, download prompt, e
       text-shadow: 0 2px 6px rgba(0,0,0,0.35);
     }
 
-• Adapt the gradient to fit the context (e.g. blue for "Install", green for "Download", amber/gold for gaming). Keep it a two-stop vertical gradient — ONE colour family only.
-• Fade+scale-in animation: opacity 0→1 and scale 0.93→1 over 0.55s.
+• Adapt gradient to context. Keep it a two-stop vertical gradient — ONE colour family only.
+• Fade+scale-in animation on the button: opacity 0→1 and scale 0.93→1 over 0.55s.
 
-BUTTON DESIGN LAWS — violations produce ugly output:
-  ✗ NEVER use multiple competing hue families on the same button (no red + yellow + green).
-  ✗ NEVER add a neon glow box-shadow (e.g. 0 0 30px #00FF00). One drop shadow only.
+MODE C — CTA BUTTON ONLY  (user wants ONLY a button — no text card, no headline)
+─────────────────────────────────────────
+⚠ CRITICAL: render ONLY the CTA pill button. NO text card. NO headline. NO extra copy.
+  The button label is the ONLY visible text on the entire stage.
+• Position the button centered, vertically at 82%:
+    position: absolute; left: 50%; top: 82%; transform: translateX(-50%);
+    width: 700px; height: 112px; border-radius: 999px;
+• Same gradient, border, box-shadow as MODE B.
+• Same fade+scale-in animation as MODE B.
+• NOTHING ELSE on stage except the button.
+
+BUTTON DESIGN LAWS (Modes B and C) — violations produce ugly output:
+  ✗ NEVER use multiple competing hue families on the same button.
+  ✗ NEVER add a neon glow box-shadow. One drop shadow only.
   ✗ NEVER use yellow, lime, or cyan text — always #FFFFFF on coloured buttons.
-  ✗ NEVER add an outer border-color that clashes with the gradient (keep it a lighter tint of the gradient).
+  ✗ NEVER add an outer border-color that clashes with the gradient.
   ✗ NEVER add more than one box-shadow layer.
 
-UNIVERSAL RULES (both modes)
+UNIVERSAL RULES (all modes)
 ─────────────────────────────────────────
-• Do NOT add anything the user did not ask for (no extra slogans, no extra buttons, no shapes).
+• Do NOT add ANYTHING the user did not ask for — no invented headlines, no extra slogans, no decorative shapes.
 • Do NOT use black or near-black (R<30 AND G<30 AND B<30) for any visible element.
 • Do NOT use CSS filter, backdrop-filter, or mix-blend-mode.
 • Keep everything else on the stage pure #000000 so it keys out cleanly.
@@ -169,9 +179,21 @@ OUTPUT
 Return ONLY the complete HTML file. No markdown fences, no explanation, no comments outside the HTML.`
 }
 
-// Detect whether the prompt is asking for a CTA button
-function hasCta(prompt: string): boolean {
-  return /\b(cta|button|btn|download|install|play now|try now|sign up|get it|buy|shop|tap|click|call.?to.?action)\b/i.test(prompt)
+// ─── Mode detection ──────────────────────────────────────────────────────────
+// A  — text card only (no button)
+// B  — text card + CTA button (user wants both a message AND a button)
+// C  — CTA button only (user wants just a button, no separate text card)
+
+type Mode = 'A' | 'B' | 'C'
+
+function detectMode(prompt: string): Mode {
+  const wantsCta = /\b(cta|button|btn|download|install|play.?now|try.?now|sign.?up|get.?it|buy|shop|tap|click|call.?to.?action)\b/i.test(prompt)
+  if (!wantsCta) return 'A'
+
+  // MODE B only when the user also asks for a separate text element alongside the button
+  // (overlay, headline, callout, reward message, caption, etc.)
+  const wantsTextCard = /\b(overlay|headline|title|caption|message|callout|reward|banner|slogan)\b/i.test(prompt)
+  return wantsTextCard ? 'B' : 'C'
 }
 
 import type {
@@ -209,10 +231,11 @@ async function generateHtml(
   templateContext: string,
   attachments: RendererAttachment[] = []
 ): Promise<string> {
-  const mode = hasCta(prompt) ? 'B' : 'A'
-  const modeLabel = mode === 'B'
-    ? 'MODE B (TEXT + CTA): render the overlay text in a text card AND a CTA pill button at the bottom.'
-    : 'MODE A (TEXT ONLY): render only the overlay text in a centered text card. No buttons, no extra copy.'
+  const mode = detectMode(prompt)
+  const modeLabel =
+    mode === 'A' ? 'MODE A (TEXT ONLY): render only the overlay text in a centered text card. No buttons, no extra copy whatsoever.'
+    : mode === 'B' ? 'MODE B (TEXT + CTA): render the overlay text in a text card AND a CTA pill button. Two elements only — no invented copy beyond what the user specified.'
+    : 'MODE C (CTA ONLY): render ONLY the CTA pill button. NO text card, NO headline, NO extra text of any kind. The button label is the sole visible text on the entire stage.'
 
   const content: ContentBlockParam[] = [
     {
