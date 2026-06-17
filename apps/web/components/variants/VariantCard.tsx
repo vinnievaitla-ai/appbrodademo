@@ -12,6 +12,7 @@ interface VariantCardProps {
   id: string
   prompt: string
   outputUrl: string
+  createdAt?: string
   onDelete: (id: string) => void
   folders?: FolderType[]
   /** workspace multi-select mode */
@@ -29,6 +30,29 @@ function formatTime(secs: number): string {
   const m = Math.floor(secs / 60)
   const s = Math.floor(secs % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function formatGeneratedAt(iso: string): { relative: string; full: string } {
+  const date = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60_000)
+  const diffHours = Math.floor(diffMs / 3_600_000)
+  const diffDays = Math.floor(diffMs / 86_400_000)
+
+  let relative: string
+  if (diffMins < 1)       relative = 'just now'
+  else if (diffMins < 60) relative = `${diffMins}m ago`
+  else if (diffHours < 24) relative = `${diffHours}h ago`
+  else if (diffDays < 7)  relative = `${diffDays}d ago`
+  else relative = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  const full = date.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  })
+
+  return { relative, full }
 }
 
 // ─── Enhanced Video Modal ─────────────────────────────────────────────────────
@@ -256,7 +280,7 @@ function VideoModal({
 const NAME_KEY = (id: string) => `variant-name-${id}`
 
 export function VariantCard({
-  id, prompt, outputUrl, onDelete, folders = [],
+  id, prompt, outputUrl, createdAt, onDelete, folders = [],
   selectable = false, selected = false, onSelect, highlighted = false, onCardClick,
 }: VariantCardProps) {
   const [showModal, setShowModal] = useState(false)
@@ -441,6 +465,19 @@ export function VariantCard({
               <span className="text-[10px] text-blue-500 font-medium truncate">{folderName}</span>
             </div>
           )}
+
+          {/* Generation timestamp */}
+          {createdAt && (() => {
+            const { relative, full } = formatGeneratedAt(createdAt)
+            return (
+              <span
+                title={full}
+                className="text-[10px] text-gray-300 tabular-nums leading-none cursor-default select-none"
+              >
+                {relative}
+              </span>
+            )
+          })()}
 
           {/* Action buttons */}
           <div className="flex gap-1.5 mt-0.5">

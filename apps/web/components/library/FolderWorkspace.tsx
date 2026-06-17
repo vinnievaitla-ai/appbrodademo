@@ -156,6 +156,7 @@ export function FolderWorkspace({
                 id={v.id}
                 prompt={v.prompt}
                 outputUrl={v.output_url!}
+                createdAt={v.created_at}
                 onDelete={onDeleteVariant}
                 folders={folders}
                 selectable
